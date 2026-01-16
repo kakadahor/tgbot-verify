@@ -9,10 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for Playwright
+# Install system dependencies for Playwright and Python build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
+    build-essential \
+    python3-dev \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
