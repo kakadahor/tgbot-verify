@@ -1,4 +1,4 @@
-# Use official Microsoft Playwright Python image
+# Use official Microsoft Playwright Python image as base
 FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 # Set environment variables
@@ -8,11 +8,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system build tools for Python C-extensions (like psutil, Pillow, reportlab)
+# Install THE ENTIRE KITCHEN SINK of build tools and libraries
+# This ensures psutil, Pillow, reportlab, and other C-extensions build perfectly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    python3-dev \
+    python3-all-dev \
+    libffi-dev \
+    libssl-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    tcl8.6-dev \
+    tk8.6-dev \
+    python3-tk \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libxcb1-dev \
+    pkg-config \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and build tools before installing requirements
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Install Python dependencies
 COPY requirements.txt .
