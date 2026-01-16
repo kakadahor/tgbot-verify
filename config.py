@@ -7,8 +7,8 @@ load_dotenv()
 
 # Telegram Bot 配置
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "pk_oa")
-CHANNEL_URL = os.getenv("CHANNEL_URL", "https://t.me/pk_oa")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "")
+CHANNEL_URL = os.getenv("CHANNEL_URL", "")
 
 # 管理员配置 (Safe integer conversion)
 try:
