@@ -50,9 +50,9 @@ RUN pip install --verbose --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Create a non-root user and change ownership for security
-RUN useradd -m botuser && chown -R botuser:botuser /app
-USER botuser
+# Temporarily use root to rule out permission issues during boot
+# RUN useradd -m botuser && chown -R botuser:botuser /app
+# USER botuser
 
 # Command to run the bot with unbuffered output
 CMD ["python", "-u", "bot.py"]

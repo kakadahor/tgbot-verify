@@ -1,4 +1,4 @@
-"""全局配置文件"""
+print("BOOTSTRAP: Loading config.py")
 import os
 from dotenv import load_dotenv
 
@@ -10,8 +10,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "pk_oa")
 CHANNEL_URL = os.getenv("CHANNEL_URL", "https://t.me/pk_oa")
 
-# 管理员配置
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "123456789"))
+# 管理员配置 (Safe integer conversion)
+try:
+    ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "123456789"))
+except (ValueError, TypeError):
+    print("BOOTSTRAP WARNING: ADMIN_USER_ID is not a valid integer. Using default.")
+    ADMIN_USER_ID = 123456789
 
 # 积分配置
 VERIFY_COST = 3  # 验证消耗的积分
