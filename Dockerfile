@@ -32,12 +32,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and build tools before installing requirements
+# Upgrade pip and build tools
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install Python dependencies
+# Install core pure-python packages first (unlikely to fail)
+RUN pip install --no-cache-dir python-telegram-bot httpx python-dotenv pymysql
+
+# Install packages that usually require compilation (granular & verbose)
+# 1. Image and PDF tools
+RUN pip install --verbose --no-cache-dir Pillow reportlab xhtml2pdf
+
+# 2. Database and Systems
+RUN pip install --verbose --no-cache-dir google-cloud-firestore psutil
+
+# 3. Playwright (already in image, but ensuring requirements met)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --verbose --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
