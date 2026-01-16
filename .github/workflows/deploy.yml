@@ -53,6 +53,7 @@ jobs:
             DB_TYPE=firestore
             BOT_TOKEN=${{ secrets.BOT_TOKEN }}
             ADMIN_USER_ID=${{ secrets.ADMIN_USER_ID }}
+            WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
