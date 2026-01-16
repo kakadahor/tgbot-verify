@@ -1,4 +1,3 @@
-print("BOOTSTRAP: Loading config.py")
 """全局配置文件"""
 import os
 from dotenv import load_dotenv
