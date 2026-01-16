@@ -1,5 +1,5 @@
 """Message Templates"""
-from config import CHANNEL_URL, VERIFY_COST, HELP_NOTION_URL
+from config import VERIFY_COST, HELP_NOTION_URL
 
 
 def get_welcome_message(full_name: str, invited_by: bool = False) -> str:
@@ -20,7 +20,6 @@ def get_welcome_message(full_name: str, invited_by: bool = False) -> str:
         "Get more credits:\n"
         "/qd - Daily check-in\n"
         "/invite - Invite friends\n"
-        f"Join our channel: {CHANNEL_URL}"
     )
     return msg
 
@@ -39,7 +38,6 @@ def get_about_message() -> str:
         "- Daily check-in: +1 credit\n"
         "- Invite friends: +2 credits/person\n"
         "- Use card keys (according to key rules)\n"
-        f"- Join our channel: {CHANNEL_URL}\n"
         "\n"
         "How to Use:\n"
         "1. Start the verification on the website and copy the full verification link\n"
