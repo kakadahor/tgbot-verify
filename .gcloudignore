@@ -1,0 +1,27 @@
+# Exclude local development files from the build context
+.git
+.gitignore
+.github
+.vscode
+.idea
+.env
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+lib
+lib64
+bin
+include
+share
+*.log
+firebase-credentials.json
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+Dockerfile
+.gcloudignore
+README.md
+*.md
