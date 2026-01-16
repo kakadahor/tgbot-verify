@@ -11,7 +11,8 @@ def _render_template(first_name: str, last_name: str) -> str:
     """读取模板，替换姓名/工号/日期，并展开 CSS 变量。"""
     full_name = f"{first_name} {last_name}"
     employee_id = random.randint(1000000, 9999999)
-    current_date = datetime.now().strftime("%m/%d/%Y %I:%M %p")
+    # Format: "January 16, 2026" - more formal and official
+    current_date = datetime.now().strftime("%B %d, %Y")
 
     template_path = Path(__file__).parent / "card-temp.html"
     html = template_path.read_text(encoding="utf-8")

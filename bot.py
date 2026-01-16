@@ -1,4 +1,4 @@
-"""Telegram 机器人主程序"""
+"""Telegram Bot Main Program"""
 import logging
 from functools import partial
 
@@ -32,7 +32,7 @@ from handlers.admin_commands import (
     broadcast_command,
 )
 
-# 配置日志
+# Configure logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -41,24 +41,24 @@ logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: object, context) -> None:
-    """全局错误处理"""
-    logger.exception("处理更新时发生异常: %s", context.error, exc_info=context.error)
+    """Global error handler"""
+    logger.exception("An exception occurred while handling update: %s", context.error, exc_info=context.error)
 
 
 def main():
-    """主函数"""
-    # 初始化数据库
+    """Main function"""
+    # Initialize database
     db = Database()
 
-    # 创建应用 - 启用并发处理
+    # Create application - Enable concurrent processing
     application = (
         Application.builder()
         .token(BOT_TOKEN)
-        .concurrent_updates(True)  # 🔥 关键：启用并发处理多个命令
+        .concurrent_updates(True)  # Key: Enable concurrent processing of multiple commands
         .build()
     )
 
-    # 注册用户命令（使用 partial 传递 db 参数）
+    # Register user commands (using partial to pass db parameter)
     application.add_handler(CommandHandler("start", partial(start_command, db=db)))
     application.add_handler(CommandHandler("about", partial(about_command, db=db)))
     application.add_handler(CommandHandler("help", partial(help_command, db=db)))
@@ -67,14 +67,14 @@ def main():
     application.add_handler(CommandHandler("invite", partial(invite_command, db=db)))
     application.add_handler(CommandHandler("use", partial(use_command, db=db)))
 
-    # 注册验证命令
+    # Register verification commands
     application.add_handler(CommandHandler("verify", partial(verify_command, db=db)))
     application.add_handler(CommandHandler("verify2", partial(verify2_command, db=db)))
     application.add_handler(CommandHandler("verify3", partial(verify3_command, db=db)))
     application.add_handler(CommandHandler("verify4", partial(verify4_command, db=db)))
     application.add_handler(CommandHandler("getV4Code", partial(getV4Code_command, db=db)))
 
-    # 注册管理员命令
+    # Register admin commands
     application.add_handler(CommandHandler("addbalance", partial(addbalance_command, db=db)))
     application.add_handler(CommandHandler("block", partial(block_command, db=db)))
     application.add_handler(CommandHandler("white", partial(white_command, db=db)))
@@ -83,10 +83,10 @@ def main():
     application.add_handler(CommandHandler("listkeys", partial(listkeys_command, db=db)))
     application.add_handler(CommandHandler("broadcast", partial(broadcast_command, db=db)))
 
-    # 注册错误处理器
+    # Register error handler
     application.add_error_handler(error_handler)
 
-    logger.info("机器人启动中...")
+    logger.info("Bot starting up...")
     application.run_polling(drop_pending_updates=True)
 
 

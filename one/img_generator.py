@@ -35,7 +35,8 @@ def generate_html(first_name, last_name, school_id='2565'):
     """
     psu_id = generate_psu_id()
     name = f"{first_name} {last_name}"
-    date = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+    # Format: "January 16, 2026" - more prominent and official
+    date = datetime.now().strftime('%B %d, %Y')
 
     # 随机选择专业
     majors = [
@@ -248,6 +249,7 @@ def generate_html(first_name, last_name, school_id='2565'):
             </div>
         </div>
 
+        <!-- Student Information Card -->
         <div class="student-card">
             <div>
                 <div class="info-label">Student Name</div>
@@ -264,6 +266,27 @@ def generate_html(first_name, last_name, school_id='2565'):
             <div>
                 <div class="info-label">Enrollment Status</div>
                 <div class="status-badge">✅ Enrolled</div>
+            </div>
+        </div>
+
+        <!-- Enrollment Verification Section -->
+        <div style="background: #fff9e6; border: 2px solid #ffd700; padding: 15px; margin-bottom: 20px; border-radius: 6px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; font-size: 13px;">
+                <div>
+                    <div class="info-label">📅 Issue Date</div>
+                    <div class="info-val" style="color: #1E407C;">{date}</div>
+                </div>
+                <div>
+                    <div class="info-label">📆 Current Academic Year</div>
+                    <div class="info-val" style="color: #1E407C;">2025-2026</div>
+                </div>
+                <div>
+                    <div class="info-label">✅ Valid Through</div>
+                    <div class="info-val" style="color: #007a5e;">May 15, 2026</div>
+                </div>
+            </div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ffd700; font-size: 11px; color: #666; text-align: center;">
+                <strong>Official Enrollment Verification</strong> - This document certifies active enrollment status
             </div>
         </div>
 
