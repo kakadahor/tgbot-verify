@@ -10,11 +10,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install THE ENTIRE KITCHEN SINK of build tools and libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system build tools and graphics headers
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     tzdata \
     build-essential \
     python3-all-dev \
+    libcairo2-dev \
+    pkg-config \
     libffi-dev \
     libssl-dev \
     libjpeg-dev \
@@ -22,13 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6-dev \
     liblcms2-dev \
     libwebp-dev \
-    tcl8.6-dev \
-    tk8.6-dev \
-    python3-tk \
     libharfbuzz-dev \
     libfribidi-dev \
-    libxcb1-dev \
-    pkg-config \
     git \
     && rm -rf /var/lib/apt/lists/*
 
