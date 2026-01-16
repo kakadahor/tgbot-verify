@@ -1,3 +1,4 @@
+print("BOOTSTRAP: Starting bot.py")
 """Telegram Bot Main Program"""
 import logging
 import os
@@ -94,11 +95,14 @@ def main():
 
     if IS_CLOUD:
         # 🌩️ RUNNING IN CLOUD
-        # Cloud Run requires binding to a port within the timeout.
+        print(f"BOOTSTRAP: Cloud Run Detected. Port: {PORT}")
+        print(f"BOOTSTRAP: BOT_TOKEN exists: {bool(BOT_TOKEN)} (Len: {len(BOT_TOKEN)})")
+        
         final_webhook_url = WEBHOOK_URL if WEBHOOK_URL else "https://placeholder.com"
         
         logger.info(f"Starting bot in CLOUD mode on port {PORT}")
         try:
+            print(f"BOOTSTRAP: Calling run_webhook on {final_webhook_url}")
             application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
@@ -107,6 +111,7 @@ def main():
                 drop_pending_updates=True
             )
         except Exception as e:
+            print(f"BOOTSTRAP FATAL: run_webhook failed: {e}")
             logger.critical(f"FATAL: Bot failed to start in Cloud: {e}", exc_info=True)
             raise
     else:
