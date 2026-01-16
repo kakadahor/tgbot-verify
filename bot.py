@@ -2,6 +2,9 @@ print("BOOTSTRAP: Starting bot.py")
 """Telegram Bot Main Program"""
 import logging
 import os
+import threading
+import http.server
+import socketserver
 from functools import partial
 
 from telegram.ext import Application, CommandHandler
@@ -96,24 +99,37 @@ def main():
     if IS_CLOUD:
         # 🌩️ RUNNING IN CLOUD
         print(f"BOOTSTRAP: Cloud Run Detected. Port: {PORT}")
-        print(f"BOOTSTRAP: BOT_TOKEN exists: {bool(BOT_TOKEN)} (Len: {len(BOT_TOKEN)})")
         
-        final_webhook_url = WEBHOOK_URL if WEBHOOK_URL else "https://placeholder.com"
-        
-        logger.info(f"Starting bot in CLOUD mode on port {PORT}")
-        try:
-            print(f"BOOTSTRAP: Calling run_webhook on {final_webhook_url}")
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=BOT_TOKEN,
-                webhook_url=f"{final_webhook_url}/{BOT_TOKEN}",
-                drop_pending_updates=True
-            )
-        except Exception as e:
-            print(f"BOOTSTRAP FATAL: run_webhook failed: {e}")
-            logger.critical(f"FATAL: Bot failed to start in Cloud: {e}", exc_info=True)
-            raise
+        if not WEBHOOK_URL or "placeholder.com" in WEBHOOK_URL:
+            # FIRST RUN: We don't have a URL yet.
+            # We must bind to the port to pass health checks, but we shouldn't 
+            # try to start the Telegram Webhook yet because it will crash.
+            print("BOOTSTRAP: No WEBHOOK_URL provided. Starting PASSIVE Health Check Server.")
+            
+            # Simple HTTP Handler to pass Google Cloud Health Check
+            class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"Bot is waiting for WEBHOOK_URL configuration. Please set it in GitHub Secrets.")
+
+            with socketserver.TCPServer(("0.0.0.0", PORT), HealthCheckHandler) as httpd:
+                print(f"BOOTSTRAP: Health Check Server live on port {PORT}. Waiting for URL...")
+                httpd.serve_forever()
+        else:
+            # SECOND RUN: We have the actual URL!
+            logger.info(f"Starting bot in CLOUD mode on port {PORT}")
+            try:
+                application.run_webhook(
+                    listen="0.0.0.0",
+                    port=PORT,
+                    url_path=BOT_TOKEN,
+                    webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+                    drop_pending_updates=True
+                )
+            except Exception as e:
+                logger.critical(f"FATAL: Bot failed to start in Cloud: {e}", exc_info=True)
+                raise
     else:
         # 💻 RUNNING LOCALLY (POLLING MODE)
         logger.info("Starting bot in LOCAL POLLING mode")
