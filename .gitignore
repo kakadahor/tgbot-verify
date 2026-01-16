@@ -50,6 +50,11 @@ logs/
 .env.local
 .env.*.local
 
+# Firebase Credentials (NEVER COMMIT!)
+firebase-credentials.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
 # Configuration (with sensitive data)
 config_local.py
 

@@ -5,7 +5,7 @@ from functools import partial
 from telegram.ext import Application, CommandHandler
 
 from config import BOT_TOKEN
-from database_mysql import Database
+from database import get_database  # New database factory
 from handlers.user_commands import (
     start_command,
     about_command,
@@ -47,8 +47,8 @@ async def error_handler(update: object, context) -> None:
 
 def main():
     """Main function"""
-    # Initialize database
-    db = Database()
+    # Initialize database (automatically selects MySQL or Firestore based on DB_TYPE env variable)
+    db = get_database()
 
     # Create application - Enable concurrent processing
     application = (
