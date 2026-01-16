@@ -1,5 +1,5 @@
-# Use official Python 3.12 slim image
-FROM python:3.12-slim
+# Use official Python 3.12 image
+FROM python:3.12
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -9,12 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for Playwright and Python build tools
+# Install system dependencies for Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
-    build-essential \
-    python3-dev \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
