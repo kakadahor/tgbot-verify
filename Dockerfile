@@ -3,14 +3,16 @@ FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Singapore
 
 # Set working directory
 WORKDIR /app
 
 # Install THE ENTIRE KITCHEN SINK of build tools and libraries
-# This ensures psutil, Pillow, reportlab, and other C-extensions build perfectly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     build-essential \
     python3-all-dev \
     libffi-dev \
