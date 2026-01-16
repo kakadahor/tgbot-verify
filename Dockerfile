@@ -26,6 +26,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libwebp-dev \
     libharfbuzz-dev \
     libfribidi-dev \
+    liblzma-dev \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -53,5 +54,5 @@ COPY . .
 RUN useradd -m botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Command to run the bot
-CMD ["python", "bot.py"]
+# Command to run the bot with unbuffered output
+CMD ["python", "-u", "bot.py"]

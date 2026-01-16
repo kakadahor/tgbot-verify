@@ -93,27 +93,33 @@ def main():
     IS_CLOUD = os.environ.get("K_SERVICE")  # Detected by Cloud Run
 
     if IS_CLOUD:
-        # RUNNING IN CLOUD
-        # If no Webhook URL is set yet, we use a dummy one just to pass the 
-        # Cloud Run Health Check (it must bind to a port).
+        # 🌩️ RUNNING IN CLOUD
+        # Cloud Run requires binding to a port within the timeout.
+        # We'll use a placeholder if WEBHOOK_URL isn't set yet.
         final_webhook_url = WEBHOOK_URL if WEBHOOK_URL else "https://placeholder.com"
         
-        logger.info(f"Starting bot in CLOUD mode (Webhook) on port {PORT}")
-        if not WEBHOOK_URL:
-            logger.warning("WEBHOOK_URL is missing. Using a placeholder to satisfy health checks.")
-
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=BOT_TOKEN,
-            webhook_url=f"{final_webhook_url}/{BOT_TOKEN}",
-            drop_pending_updates=True
-        )
+        logger.info(f"Starting bot in CLOUD mode on port {PORT}")
+        try:
+            # application.run_webhook is blocking.
+            # Once called, it starts a web server listening on 0.0.0.0:PORT.
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=PORT,
+                url_path=BOT_TOKEN,
+                webhook_url=f"{final_webhook_url}/{BOT_TOKEN}",
+                drop_pending_updates=True
+            )
+        except Exception as e:
+            logger.critical(f"FATAL: Bot failed to start in Cloud: {e}", exc_info=True)
+            raise
     else:
-        # RUNNING LOCALLY (POLLING MODE)
+        # 💻 RUNNING LOCALLY (POLLING MODE)
         logger.info("Starting bot in LOCAL POLLING mode")
         application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Main loop crashed: {e}")
