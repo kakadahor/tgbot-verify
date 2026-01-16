@@ -90,20 +90,28 @@ def main():
     # Detect Environment
     PORT = int(os.environ.get("PORT", "8080"))
     WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+    IS_CLOUD = os.environ.get("K_SERVICE")  # Detected by Cloud Run
 
-    if WEBHOOK_URL:
-        # RUNNING IN CLOUD (WEBHOOK MODE)
-        logger.info(f"Starting bot in WEBHOOK mode on port {PORT}")
+    if IS_CLOUD:
+        # RUNNING IN CLOUD
+        # If no Webhook URL is set yet, we use a dummy one just to pass the 
+        # Cloud Run Health Check (it must bind to a port).
+        final_webhook_url = WEBHOOK_URL if WEBHOOK_URL else "https://placeholder.com"
+        
+        logger.info(f"Starting bot in CLOUD mode (Webhook) on port {PORT}")
+        if not WEBHOOK_URL:
+            logger.warning("WEBHOOK_URL is missing. Using a placeholder to satisfy health checks.")
+
         application.run_webhook(
             listen="0.0.0.0",
             port=PORT,
             url_path=BOT_TOKEN,
-            webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+            webhook_url=f"{final_webhook_url}/{BOT_TOKEN}",
             drop_pending_updates=True
         )
     else:
         # RUNNING LOCALLY (POLLING MODE)
-        logger.info("Starting bot in POLLING mode")
+        logger.info("Starting bot in LOCAL POLLING mode")
         application.run_polling(drop_pending_updates=True)
 
 
