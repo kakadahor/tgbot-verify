@@ -1,5 +1,4 @@
 # Use official Microsoft Playwright Python image
-# This image comes pre-installed with all necessary system dependencies and browsers
 FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 # Set environment variables
@@ -8,6 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Set working directory
 WORKDIR /app
+
+# Install system build tools for Python C-extensions (like psutil, Pillow, reportlab)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
