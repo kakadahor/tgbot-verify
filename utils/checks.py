@@ -30,7 +30,7 @@ async def reject_group_command(update: Update) -> bool:
     message_text = update.message.text or ""
     
     # Allowed public group commands
-    allowed_group_commands = ("/verify", "/verify2", "/verify3", "/verify4", "/verify5", "/qd", "/getV4Code")
+    allowed_group_commands = ("/verify", "/verify2", "/verify3", "/verify4", "/verify5", "/qd", "/getV4Code", "/getv4code", "/use")
     if any(message_text.startswith(cmd) for cmd in allowed_group_commands):
         return False
 

@@ -538,9 +538,16 @@ async def guide_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             "• AI-powered coding assistant\n"
             "• Full-stack web development\n"
             "• Teacher discount access\n\n"
+            "**⏳ If Code Not Ready:**\n"
+            "If verification takes longer than 20 seconds:\n"
+            "1. Bot will give you a `verification_id`\n"
+            "2. Wait 1-5 minutes for review\n"
+            "3. Check status: `/getv4code <verification_id>`\n"
+            "4. Retrieve your code when ready\n\n"
             "**💡 Tips:**\n"
             "• For educators in tech/CS\n"
-            "• Verification required for discount"
+            "• Verification required for discount\n"
+            "• No extra charge for code retrieval"
         ),
         "general": (
             "📚 **General Bot Guide**\n"

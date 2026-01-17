@@ -61,8 +61,33 @@ logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: object, context) -> None:
-    """Global error handler"""
+    """Global error handler - Send user-friendly messages instead of silent failures"""
     logger.exception("An exception occurred while handling update: %s", context.error, exc_info=context.error)
+    
+    # Try to notify the user about the error
+    try:
+        if update and hasattr(update, 'effective_message') and update.effective_message:
+            error_message = (
+                "⚠️ **Oops! Something went wrong**\n\n"
+                "We encountered an unexpected error while processing your request.\n\n"
+                "**What you can do:**\n"
+                "• Try the command again in a few moments\n"
+                "• If the issue persists, please contact support\n\n"
+                "We apologize for the inconvenience!"
+            )
+            
+            # Add specific error info for admins
+            from config import ADMIN_IDS
+            if update.effective_user and update.effective_user.id in ADMIN_IDS:
+                error_type = type(context.error).__name__
+                error_message += f"\n\n🔧 **Admin Info:**\n`{error_type}: {str(context.error)[:100]}`"
+            
+            await update.effective_message.reply_text(
+                error_message,
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        logger.error(f"Failed to send error message to user: {e}")
 
 
 def main():
@@ -103,6 +128,7 @@ def main():
     # Register verification commands
     application.add_handler(CommandHandler("verify", partial(verify_command, db=db)))
     application.add_handler(CommandHandler("getV4Code", partial(getV4Code_command, db=db)))
+    application.add_handler(CommandHandler("getv4code", partial(getV4Code_command, db=db)))  # Lowercase alias
 
     # Register admin commands
     application.add_handler(CommandHandler("addgems", partial(addgems_command, db=db)))
@@ -132,19 +158,24 @@ def main():
         from telegram import BotCommand, BotCommandScopeChat
         from config import ADMIN_USER_ID, ABA_NOTIFICATION_GROUP_ID
 
-        # 1. Commands for EVERYONE
+        # 1. Commands for EVERYONE (Regular Users)
         user_commands = [
             BotCommand("start", "🚀 Start bot & Get Welcome Message"),
+            BotCommand("about", "ℹ️ About this bot"),
             BotCommand("services", "💰 View Services & Pricing"),
             BotCommand("topup", "💎 Top-up Gems (ABA/USDT)"),
             BotCommand("verify", "✅ Start Account Verification"),
+            BotCommand("getv4code", "🔑 Get V4 verification code"),
             BotCommand("proof", "📸 Submit Payment Screenshot"),
             BotCommand("me", "👤 My Profile & Balance"),
+            BotCommand("balance", "💰 Check Gem Balance"),
             BotCommand("guide", "📖 How to use/buy guides"),
             BotCommand("myjobs", "📋 Check my verification status"),
             BotCommand("lsgd", "📜 Transaction History"),
             BotCommand("checkin", "🎁 Daily Reward (+1 Gem)"),
             BotCommand("invite", "👥 Earn Gems by inviting friends"),
+            BotCommand("use", "🎟️ Redeem card key/voucher code"),
+            BotCommand("lang", "🌐 Language Settings"),
             BotCommand("help", "❓ Get assistance"),
         ]
         from telegram import BotCommandScopeAllPrivateChats
@@ -156,9 +187,14 @@ def main():
         # 2. Commands for ADMIN (will show in the Private Chat with bot)
         admin_commands = user_commands + [
             BotCommand("addgems", "💰 [Admin] Add Gems to User"),
+            BotCommand("approve", "✅ [Admin] Approve Payment"),
             BotCommand("reject", "❌ [Admin] Reject Payment"),
             BotCommand("block", "🚫 [Admin] Block User"),
-            BotCommand("broadcast", "📣 [Admin] Send message to all"),
+            BotCommand("white", "✅ [Admin] Unblock User"),
+            BotCommand("blacklist", "📋 [Admin] View Blacklist"),
+            BotCommand("genkey", "� [Admin] Generate Card Key"),
+            BotCommand("listkeys", "📜 [Admin] List All Card Keys"),
+            BotCommand("broadcast", "�📣 [Admin] Send message to all"),
         ]
         try:
             await application.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_USER_ID))
@@ -167,7 +203,7 @@ def main():
 
         # 3. Commands for ADMIN GROUP (Fast for the admin group)
         group_commands = [
-            BotCommand("approve", "✅ Reply to proof: /approve <user_id> <trx_id> <amount>"),
+            BotCommand("approve", "✅ /approve <user_id> <amount> OR <user_id> <trx_id> <amount>"),
             BotCommand("reject", "❌ Reply to proof: /reject [reason]"),
             BotCommand("addgems", "💰 Add Gems: /addgems <id> <amount>"),
         ]

@@ -309,9 +309,14 @@ class FirestoreDatabase(Database):
             if isinstance(expire_at, str):
                 expire_at = datetime.fromisoformat(expire_at)
             elif hasattr(expire_at, 'timestamp'):
-                expire_at = datetime.fromtimestamp(expire_at.timestamp())
+                expire_at = datetime.fromtimestamp(expire_at.timestamp(), tz=timezone.utc)
                 
-            if datetime.now() > expire_at:
+            # Make sure both datetimes are timezone-aware for comparison
+            now = datetime.now(timezone.utc)
+            if expire_at.tzinfo is None:
+                expire_at = expire_at.replace(tzinfo=timezone.utc)
+            
+            if now > expire_at:
                 return -2 # Match MySQL: -2 for expired
         
         # Check max uses
