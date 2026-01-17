@@ -8,24 +8,24 @@ To use admin commands, your Telegram user ID must be set as `ADMIN_USER_ID` in t
 
 ## Available Commands
 
-### 1. Add Balance to User
+### 1. Add Gems to User
 
-**Command:** `/addbalance <user_id> <amount>`
+**Command:** `/addgems <user_id> <amount>`
 
-**Description:** Add credits to a specific user's account.
+**Description:** Add Gems to a specific user's account.
 
 **Parameters:**
 - `user_id` - The Telegram user ID of the target user
-- `amount` - Number of credits to add (positive integer)
+- `amount` - Number of Gems to add (positive integer)
 
 **Examples:**
 ```
-/addbalance 123456789 100
-/addbalance 987654321 50
+/addgems 123456789 100
+/addgems 987654321 50
 ```
 
 **Response:**
-- Success: "✅ Successfully added {amount} credits for user {user_id}. Current balance: {balance}"
+- Success: "✅ Successfully added {amount} Gems for user {user_id}. Current balance: {balance}"
 - Error: "User does not exist." or "Invalid parameter format."
 
 ---
@@ -89,13 +89,13 @@ To use admin commands, your Telegram user ID must be set as `ADMIN_USER_ID` in t
 
 ### 5. Generate Card Key
 
-**Command:** `/genkey <key_code> <credits> [uses] [expire_days]`
+**Command:** `/genkey <key_code> <amount> [uses] [expire_days]`
 
-**Description:** Generate a redeemable card key that users can redeem for credits.
+**Description:** Generate a redeemable card key that users can redeem for Gems.
 
 **Parameters:**
 - `key_code` - Unique identifier for the card key (string)
-- `credits` - Number of credits the key provides (positive integer)
+- `amount` - Number of Gems the key provides (positive integer)
 - `uses` - (Optional) Maximum number of times the key can be used (default: 1)
 - `expire_days` - (Optional) Number of days until expiration (default: never expires)
 
@@ -107,7 +107,7 @@ To use admin commands, your Telegram user ID must be set as `ADMIN_USER_ID` in t
 ```
 
 **Response:**
-- Success: Shows key details including code, credits, uses, and expiry
+- Success: Shows key details including code, Gems, uses, and expiry
 - Error: "Key already exists or generation failed."
 
 **Notes:**
@@ -131,7 +131,7 @@ To use admin commands, your Telegram user ID must be set as `ADMIN_USER_ID` in t
 **Response:**
 - Shows up to 20 most recent keys with:
   - Key code
-  - Credits value
+  - Gems value
   - Uses (current/maximum)
   - Status (Valid, Expired, or Permanent)
   - Days remaining (if applicable)
@@ -177,12 +177,7 @@ To use commands that require a user ID, you can:
 3. Send any message to get your user ID
 
 ### Method 2: Check Database
-Run this command in your terminal:
-
-```bash
-cd /Users/kakada/Documents/GitHub/tgbot-verify
-./venv/bin/python -c "from database_mysql import Database; db = Database(); users = db.get_all_user_ids(); print(users)"
-```
+If using Firestore, you can view the `users` collection in the Firebase Console.
 
 ### Method 3: Check Bot Logs
 When users interact with the bot, their user IDs appear in the logs.
@@ -195,7 +190,7 @@ When users interact with the bot, their user IDs appear in the logs.
 
 2. **No Confirmation:** Most commands execute immediately without confirmation. Be careful when using destructive commands like `/block`.
 
-3. **Database Changes:** All commands directly modify the MySQL database. Ensure you have backups before making bulk changes.
+3. **Database Changes:** All commands directly modify the Firestore database.
 
 4. **Broadcast Limits:** Telegram has rate limits. Broadcasting to thousands of users may take time and could trigger temporary restrictions.
 
@@ -211,7 +206,7 @@ Share this key with new users for a welcome bonus.
 
 ### Reward Active Users
 ```
-/addbalance 123456789 50
+/addgems 123456789 50
 ```
 Manually reward users for participation or feedback.
 
@@ -235,7 +230,7 @@ If a command fails, check:
 1. **Correct Format:** Ensure you're using the right syntax
 2. **User Exists:** Verify the user ID is registered in the database
 3. **Valid Parameters:** Check that numbers are positive integers
-4. **Database Connection:** Ensure MySQL is running and accessible
+4. **Database Connection:** Ensure Firestore is working and accessible
 5. **Bot Permissions:** Verify your user ID matches `ADMIN_USER_ID` in `.env`
 
 ---
@@ -244,5 +239,5 @@ If a command fails, check:
 
 For issues or questions about admin commands:
 1. Check the bot logs in the terminal
-2. Review the database using MySQL client
+2. Review the database using Firebase Console
 3. Refer to the main documentation in `README.md`

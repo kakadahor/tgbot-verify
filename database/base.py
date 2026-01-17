@@ -7,6 +7,7 @@ This ensures MySQL and Firestore implementations have the same methods.
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
+from datetime import datetime
 
 
 class Database(ABC):
@@ -42,13 +43,18 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    def add_balance(self, user_id: int, amount: int) -> bool:
-        """Add credits to user balance"""
+    def add_balance(self, user_id: int, amount: int, description: str = "", metadata: Optional[Dict] = None, transaction_at: Optional[datetime] = None) -> bool:
+        """Add Gems to user balance"""
         pass
 
     @abstractmethod
-    def deduct_balance(self, user_id: int, amount: int) -> bool:
-        """Deduct credits from user balance"""
+    def deduct_balance(self, user_id: int, amount: int, description: str = "", metadata: Optional[Dict] = None, transaction_at: Optional[datetime] = None) -> bool:
+        """Deduct Gems from user balance"""
+        pass
+
+    @abstractmethod
+    def log_transaction(self, user_id: int, amount: int, transaction_type: str, description: str = "", metadata: Optional[Dict] = None, transaction_at: Optional[datetime] = None) -> bool:
+        """Log a transaction to the ledger"""
         pass
 
     # Blacklist Management

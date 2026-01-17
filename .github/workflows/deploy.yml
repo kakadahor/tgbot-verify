@@ -51,6 +51,7 @@ jobs:
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           flags: --memory=2Gi --timeout=300 --allow-unauthenticated
           env_vars: |
+            ENVIRONMENT=production
             DB_TYPE=firestore
             BOT_TOKEN=${{ secrets.BOT_TOKEN }}
             ADMIN_USER_ID=${{ secrets.ADMIN_USER_ID }}

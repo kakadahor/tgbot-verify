@@ -8,14 +8,20 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import VERIFY_COST
-from database_mysql import Database
+from config import SERVICE_COSTS, VERIFY_COST
+from database.base import Database
 from one.sheerid_verifier import SheerIDVerifier as OneVerifier
 from k12.sheerid_verifier import SheerIDVerifier as K12Verifier
 from spotify.sheerid_verifier import SheerIDVerifier as SpotifyVerifier
 from youtube.sheerid_verifier import SheerIDVerifier as YouTubeVerifier
 from Boltnew.sheerid_verifier import SheerIDVerifier as BoltnewVerifier
-from utils.messages import get_insufficient_balance_message, get_verify_usage_message
+from utils.messages import (
+    get_insufficient_balance_message,
+    get_verify_usage_message,
+    get_pricing_menu
+)
+from utils.checks import global_checks
+from config import SERVICE_COSTS, VERIFY_COST, MAINTENANCE_MODE, MAINTENANCE_REASON
 
 # Try to import concurrency control, use fallback implementation if it fails
 try:
@@ -28,55 +34,79 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+@global_checks()
 async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
-    """Handle /verify command - Gemini One Pro"""
+    """Unified /verify command handler"""
     user_id = update.effective_user.id
 
-    if db.is_user_blocked(user_id):
-        await update.message.reply_text("You are blacklisted and cannot use this feature.")
-        return
-
-    if not db.user_exists(user_id):
-        await update.message.reply_text("Please register using /start first.")
-        return
-
+    # Verify logic
+    user = db.get_user(user_id)
+    
     if not context.args:
         await update.message.reply_text(
-            get_verify_usage_message("/verify", "Gemini One Pro")
+            get_pricing_menu(user['balance']),
+            parse_mode="Markdown"
         )
         return
 
     url = context.args[0]
-    user = db.get_user(user_id)
-    if user["balance"] < VERIFY_COST:
+    
+    # Detect service type
+    service, verifier_class = _detect_service(url)
+    if not service:
         await update.message.reply_text(
-            get_insufficient_balance_message(user["balance"])
+            "❌ **Unsupported Link**\n\nPlease provide a valid SheerID verification link for Gemini, ChatGPT, Spotify, YouTube, or Bolt.new.",
+            parse_mode="Markdown"
         )
         return
 
-    verification_id = OneVerifier.parse_verification_id(url)
-    if not verification_id:
-        await update.message.reply_text("Invalid SheerID link. Please check and try again.")
+    # Get service cost
+    cost = SERVICE_COSTS.get(service, VERIFY_COST)
+
+    # Check balance first
+    if user["balance"] < cost:
+        await update.message.reply_text(
+            get_insufficient_balance_message(user["balance"], cost),
+            parse_mode="Markdown"
+        )
         return
 
-    if not db.deduct_balance(user_id, VERIFY_COST):
-        await update.message.reply_text("Failed to deduct credits. Please try again later.")
+    # Special handling for Bolt.new (Verify 4)
+    if service == "bolt_teacher":
+        return await verify4_command(update, context, db)
+
+    # Generic verification flow for others
+    # (Simplified for this unified command, using existing logic)
+    
+    verification_id = verifier_class.parse_verification_id(url)
+    if not verification_id:
+        await update.message.reply_text(
+            "❌ **Invalid Link**\n\nCould not find a `verificationId` in your link. Please make sure you copied the full URL from your browser.",
+            parse_mode="Markdown"
+        )
+        return
+        
+    service_display = service.replace("_", " ").title()
+
+    if not db.deduct_balance(user_id, cost, description=f"Verify {service_display}"):
+        await update.message.reply_text("Failed to deduct Gems. Please try again later.")
         return
 
     processing_msg = await update.message.reply_text(
-        f"Starting Gemini One Pro verification...\n"
-        f"Verification ID: {verification_id}\n"
-        f"Deducted {VERIFY_COST} credits\n\n"
-        "Please wait, this may take 1-2 minutes..."
+        f"🚀 Starting {service_display} verification...\n"
+        f"Verification ID: `{verification_id}`\n"
+        f"Deducted {cost} Gems\n\n"
+        "Please wait, this may take 1-2 minutes...",
+        parse_mode="Markdown"
     )
 
     try:
-        verifier = OneVerifier(verification_id)
+        verifier = verifier_class(verification_id)
         result = await asyncio.to_thread(verifier.verify)
 
         db.add_verification(
             user_id,
-            "gemini_one_pro",
+            service,
             url,
             "success" if result["success"] else "failed",
             str(result),
@@ -90,18 +120,46 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db:
                 result_msg += f"Redirect link:\n{result['redirect_url']}"
             await processing_msg.edit_text(result_msg)
         else:
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description=f"Refund: {service_display} failed", txn_type='refund')
             await processing_msg.edit_text(
                 f"❌ Verification failed: {result.get('message', 'Unknown error')}\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
     except Exception as e:
-        logger.error("Verification process error: %s", e)
-        db.add_balance(user_id, VERIFY_COST)
+        logger.error(f"Verification process error for {service}: {e}")
+        db.add_balance(user_id, cost, description=f"Refund: {service_display} error")
         await processing_msg.edit_text(
             f"❌ An error occurred during processing: {str(e)}\n\n"
-            f"Refunded {VERIFY_COST} credits"
+            f"Refunded {cost} Gems"
         )
+
+
+def _detect_service(url: str):
+    """Detect service type from URL"""
+    url_lower = url.lower()
+    
+    # Keyword-based detection (most specific)
+    if "gemini" in url_lower or "google" in url_lower:
+        return "gemini_one_pro", OneVerifier
+    elif "openai" in url_lower or "chatgpt" in url_lower:
+        return "chatgpt_teacher_k12", K12Verifier
+    elif "spotify" in url_lower:
+        return "spotify_student", SpotifyVerifier
+    elif "youtube" in url_lower:
+        return "youtube_student", YouTubeVerifier
+    elif "bolt" in url_lower:
+        return "bolt_teacher", BoltnewVerifier
+        
+    # Program ID fallback
+    # Gemini/Spotify/YouTube share '67c8c14f5f17a83b745e3f82' in current setup
+    if "67c8c14f5f17a83b745e3f82" in url:
+        return "gemini_one_pro", OneVerifier  # Default to Gemini if shared
+    elif "68d47554aa292d20b9bec8f7" in url:
+        return "chatgpt_teacher_k12", K12Verifier
+    elif "68cc6a2e64f55220de204448" in url:
+        return "bolt_teacher", BoltnewVerifier
+        
+    return None, None
 
 
 async def verify2_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
@@ -124,9 +182,12 @@ async def verify2_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
     url = context.args[0]
     user = db.get_user(user_id)
-    if user["balance"] < VERIFY_COST:
+    cost = SERVICE_COSTS.get("chatgpt_teacher_k12", VERIFY_COST)
+    
+    if user["balance"] < cost:
         await update.message.reply_text(
-            get_insufficient_balance_message(user["balance"])
+            get_insufficient_balance_message(user["balance"], cost),
+            parse_mode="Markdown"
         )
         return
 
@@ -135,14 +196,14 @@ async def verify2_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         await update.message.reply_text("Invalid SheerID link. Please check and try again.")
         return
 
-    if not db.deduct_balance(user_id, VERIFY_COST):
-        await update.message.reply_text("Failed to deduct credits. Please try again later.")
+    if not db.deduct_balance(user_id, cost, description="Verify ChatGPT Teacher"):
+        await update.message.reply_text("Failed to deduct Gems. Please try again later.")
         return
 
     processing_msg = await update.message.reply_text(
         f"Starting ChatGPT Teacher K12 verification...\n"
         f"Verification ID: {verification_id}\n"
-        f"Deducted {VERIFY_COST} credits\n\n"
+        f"Deducted {cost} Gems\n\n"
         "Please wait, this may take 1-2 minutes..."
     )
 
@@ -166,17 +227,17 @@ async def verify2_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
                 result_msg += f"Redirect link:\n{result['redirect_url']}"
             await processing_msg.edit_text(result_msg)
         else:
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description="Refund: ChatGPT Teacher failed", txn_type='refund')
             await processing_msg.edit_text(
                 f"❌ Verification failed: {result.get('message', 'Unknown error')}\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
     except Exception as e:
         logger.error("Verification process error: %s", e)
-        db.add_balance(user_id, VERIFY_COST)
+        db.add_balance(user_id, cost, description="Refund: ChatGPT Teacher error")
         await processing_msg.edit_text(
             f"❌ An error occurred during processing: {str(e)}\n\n"
-            f"Refunded {VERIFY_COST} credits"
+            f"Refunded {cost} Gems"
         )
 
 
@@ -200,9 +261,12 @@ async def verify3_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
     url = context.args[0]
     user = db.get_user(user_id)
-    if user["balance"] < VERIFY_COST:
+    cost = SERVICE_COSTS.get("spotify_student", VERIFY_COST)
+    
+    if user["balance"] < cost:
         await update.message.reply_text(
-            get_insufficient_balance_message(user["balance"])
+            get_insufficient_balance_message(user["balance"], cost),
+            parse_mode="Markdown"
         )
         return
 
@@ -212,13 +276,13 @@ async def verify3_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         await update.message.reply_text("Invalid SheerID link. Please check and try again.")
         return
 
-    if not db.deduct_balance(user_id, VERIFY_COST):
-        await update.message.reply_text("Failed to deduct credits. Please try again later.")
+    if not db.deduct_balance(user_id, cost, description="Verify Spotify Student"):
+        await update.message.reply_text("Failed to deduct Gems. Please try again later.")
         return
 
     processing_msg = await update.message.reply_text(
         f"🎵 Starting Spotify Student verification...\n"
-        f"Deducted {VERIFY_COST} credits\n\n"
+        f"Deducted {cost} Gems\n\n"
         "📝 Generating student information...\n"
         "🎨 Generating student ID PNG...\n"
         "📤 Submitting document..."
@@ -249,17 +313,17 @@ async def verify3_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
                 result_msg += f"🔗 Redirect link:\n{result['redirect_url']}"
             await processing_msg.edit_text(result_msg)
         else:
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description="Refund: Spotify Student failed", txn_type='refund')
             await processing_msg.edit_text(
                 f"❌ Verification failed: {result.get('message', 'Unknown error')}\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
     except Exception as e:
         logger.error("Spotify verification process error: %s", e)
-        db.add_balance(user_id, VERIFY_COST)
+        db.add_balance(user_id, cost, description="Refund: Spotify Student error")
         await processing_msg.edit_text(
             f"❌ An error occurred during processing: {str(e)}\n\n"
-            f"Refunded {VERIFY_COST} credits"
+            f"Refunded {cost} Gems"
         )
 
 
@@ -297,13 +361,13 @@ async def verify4_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         await update.message.reply_text("Invalid SheerID link. Please check and try again.")
         return
 
-    if not db.deduct_balance(user_id, VERIFY_COST):
-        await update.message.reply_text("Failed to deduct credits. Please try again later.")
+    if not db.deduct_balance(user_id, cost, description="Verify Bolt.new Teacher"):
+        await update.message.reply_text("Failed to deduct Gems. Please try again later.")
         return
 
     processing_msg = await update.message.reply_text(
         f"🚀 Starting Bolt.new Teacher verification...\n"
-        f"Deducted {VERIFY_COST} credits\n\n"
+        f"Deducted {cost} Gems\n\n"
         "📤 Submitting document..."
     )
 
@@ -318,19 +382,19 @@ async def verify4_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
         if not result.get("success"):
             # Submission failed, refund
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description="Refund: Bolt.new submission failed", txn_type='refund')
             await processing_msg.edit_text(
                 f"❌ Document submission failed: {result.get('message', 'Unknown error')}\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
             return
         
         vid = result.get("verification_id", "")
         if not vid:
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description="Refund: Bolt.new ID extraction failed")
             await processing_msg.edit_text(
                 f"❌ Failed to get verification ID\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
             return
         
@@ -376,7 +440,7 @@ async def verify4_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
                 f"📋 Verification ID: `{vid}`\n\n"
                 f"💡 Please query later using:\n"
                 f"`/getV4Code {vid}`\n\n"
-                f"Note: Credits already deducted, no additional charge for later queries"
+                f"Note: Gems already deducted, no additional charge for later queries"
             )
             
             # Save pending record
@@ -391,10 +455,10 @@ async def verify4_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
             
     except Exception as e:
         logger.error("Bolt.new verification process error: %s", e)
-        db.add_balance(user_id, VERIFY_COST)
+        db.add_balance(user_id, cost, description="Refund: Bolt.new process error", txn_type='refund')
         await processing_msg.edit_text(
             f"❌ An error occurred during processing: {str(e)}\n\n"
-            f"Refunded {VERIFY_COST} credits"
+            f"Refunded {cost} Gems"
         )
 
 
@@ -491,13 +555,13 @@ async def verify5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         await update.message.reply_text("Invalid SheerID link. Please check and try again.")
         return
 
-    if not db.deduct_balance(user_id, VERIFY_COST):
-        await update.message.reply_text("Failed to deduct credits. Please try again later.")
+    if not db.deduct_balance(user_id, cost, description="Verify YouTube Student"):
+        await update.message.reply_text("Failed to deduct Gems. Please try again later.")
         return
 
     processing_msg = await update.message.reply_text(
         f"📺 Starting YouTube Student Premium verification...\n"
-        f"Deducted {VERIFY_COST} credits\n\n"
+        f"Deducted {cost} Gems\n\n"
         "📝 Generating student information...\n"
         "🎨 Generating student ID PNG...\n"
         "📤 Submitting document..."
@@ -528,31 +592,26 @@ async def verify5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
                 result_msg += f"🔗 Redirect link:\n{result['redirect_url']}"
             await processing_msg.edit_text(result_msg)
         else:
-            db.add_balance(user_id, VERIFY_COST)
+            db.add_balance(user_id, cost, description="Refund: YouTube Student failed", txn_type='refund')
             await processing_msg.edit_text(
                 f"❌ Verification failed: {result.get('message', 'Unknown error')}\n\n"
-                f"Refunded {VERIFY_COST} credits"
+                f"Refunded {cost} Gems"
             )
     except Exception as e:
         logger.error("YouTube verification process error: %s", e)
-        db.add_balance(user_id, VERIFY_COST)
+        db.add_balance(user_id, cost, description="Refund: YouTube Student error")
         await processing_msg.edit_text(
             f"❌ An error occurred during processing: {str(e)}\n\n"
-            f"Refunded {VERIFY_COST} credits"
+            f"Refunded {cost} Gems"
         )
 
 
+@global_checks()
 async def getV4Code_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
     """Handle /getV4Code command - Get Bolt.new Teacher verification code"""
     user_id = update.effective_user.id
 
-    if db.is_user_blocked(user_id):
-        await update.message.reply_text("You are blacklisted and cannot use this feature.")
-        return
-
-    if not db.user_exists(user_id):
-        await update.message.reply_text("Please register using /start first.")
-        return
+    # Code logic
 
     # Check if verification_id is provided
     if not context.args:

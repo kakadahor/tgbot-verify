@@ -5,6 +5,7 @@ Using the provided MySQL server for data storage
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
+import json
 import pymysql
 from pymysql.cursors import DictCursor
 from dotenv import load_dotenv
@@ -35,6 +36,52 @@ class MySQLDatabase:
         logger.info(f"MySQL Database Initialization: {self.config['user']}@{self.config['host']}/{self.config['database']}")
         self.init_database()
 
+    def log_transaction(self, user_id: int, amount: int, transaction_type: str, description: str = "", metadata: Dict = None, transaction_at: datetime = None):
+        """Log a transaction to the ledger"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            metadata_json = json.dumps(metadata) if metadata else None
+            cursor.execute(
+                """
+                INSERT INTO ledger (user_id, amount, type, description, metadata, created_at, transaction_at)
+                VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+                """,
+                (user_id, amount, transaction_type, description, metadata_json, transaction_at)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to log transaction: {e}")
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    def trx_exists(self, trx_id: str) -> bool:
+        """Check if a transaction ID has already been processed"""
+        if not trx_id:
+            return False
+            
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            # Check in ledger metadata (stored as JSON string)
+            # We search for the exact trx_id in the JSON string
+            pattern = f'%"{trx_id}"%'
+            cursor.execute(
+                "SELECT 1 FROM ledger WHERE metadata LIKE %s LIMIT 1",
+                (pattern,)
+            )
+            return cursor.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking trx_exists: {e}")
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
     def get_connection(self):
         """Get database connection"""
         return pymysql.connect(**self.config)
@@ -45,6 +92,16 @@ class MySQLDatabase:
         cursor = conn.cursor()
 
         try:
+            # Migration: Add transaction_at to ledger if it doesn't exist
+            try:
+                cursor.execute("SHOW COLUMNS FROM ledger LIKE 'transaction_at'")
+                if not cursor.fetchone():
+                    logger.info("Migrating ledger table: adding transaction_at column")
+                    cursor.execute("ALTER TABLE ledger ADD COLUMN transaction_at DATETIME NULL AFTER created_at")
+                    conn.commit()
+            except Exception as e:
+                logger.debug(f"Migration check skipped: {e} (ledger table might not exist yet)")
+
             # Users Table
             cursor.execute(
                 """
@@ -127,6 +184,25 @@ class MySQLDatabase:
                     used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_key_code (key_code),
                     INDEX idx_user_id (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+
+            # Transaction Ledger Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ledger (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    amount INT NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    description TEXT,
+                    metadata TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    transaction_at DATETIME NULL,
+                    INDEX idx_user_id (user_id),
+                    INDEX idx_type (type),
+                    INDEX idx_created_at (created_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """
             )
@@ -264,7 +340,7 @@ class MySQLDatabase:
             cursor.close()
             conn.close()
 
-    def add_balance(self, user_id: int, amount: int) -> bool:
+    def add_balance(self, user_id: int, amount: int, description: str = "Balance added", metadata: Dict = None, transaction_at: datetime = None) -> bool:
         """Add credits to user balance"""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -275,6 +351,10 @@ class MySQLDatabase:
                 (amount, user_id),
             )
             conn.commit()
+            
+            # Log transaction
+            self.log_transaction(user_id, amount, 'topup' if amount > 5 else 'reward', description, metadata, transaction_at)
+            
             return True
         except Exception as e:
             logger.error(f"Failed to add credits: {e}")
@@ -284,7 +364,7 @@ class MySQLDatabase:
             cursor.close()
             conn.close()
 
-    def deduct_balance(self, user_id: int, amount: int) -> bool:
+    def deduct_balance(self, user_id: int, amount: int, description: str = "Balance deducted", metadata: Dict = None, transaction_at: datetime = None) -> bool:
         """Deduct credits from user balance"""
         user = self.get_user(user_id)
         if not user or user["balance"] < amount:
@@ -299,6 +379,10 @@ class MySQLDatabase:
                 (amount, user_id),
             )
             conn.commit()
+            
+            # Log transaction
+            self.log_transaction(user_id, -amount, 'spend', description, metadata, transaction_at)
+            
             return True
         except Exception as e:
             logger.error(f"Failed to deduct credits: {e}")

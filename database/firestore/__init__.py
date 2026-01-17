@@ -6,8 +6,8 @@ All methods match the Database interface defined in database/base.py
 """
 
 from database.base import Database
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,14 +31,37 @@ class FirestoreDatabase(Database):
         
         self.db = firestore.Client()
         
-        # Collection references
-        self.users_ref = self.db.collection('users')
-        self.verifications_ref = self.db.collection('verifications')
-        self.card_keys_ref = self.db.collection('card_keys')
-        self.card_usage_ref = self.db.collection('card_key_usage')
-        self.invitations_ref = self.db.collection('invitations')
+        # Collection references (Multi-Environment aware)
+        from config import FS_COLLECTIONS
+        self.users_ref = self.db.collection(FS_COLLECTIONS['users'])
+        self.verifications_ref = self.db.collection(FS_COLLECTIONS['verifications'])
+        self.card_keys_ref = self.db.collection(FS_COLLECTIONS['card_keys'])
+        self.card_usage_ref = self.db.collection(FS_COLLECTIONS['card_key_usage'])
+        self.invitations_ref = self.db.collection(FS_COLLECTIONS['invitations'])
+        self.ledger_ref = self.db.collection(FS_COLLECTIONS['ledger'])
         
-        logger.info("Firestore database initialized")
+        logger.info(f"Firestore database initialized (Env: {FS_COLLECTIONS['users']})")
+    
+    # ========== Transaction Ledger ==========
+    
+    def log_transaction(self, user_id: int, amount: int, transaction_type: str, description: str = "", metadata: Dict = None, transaction_at: datetime = None):
+        """Log a transaction to the Firestore ledger"""
+        try:
+            transaction_data = {
+                'user_id': user_id,
+                'amount': amount,
+                'type': transaction_type,
+                'description': description,
+                'metadata': metadata or {},
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'transaction_at': transaction_at or firestore.SERVER_TIMESTAMP
+            }
+            from config import FS_COLLECTIONS
+            self.db.collection(FS_COLLECTIONS['ledger']).add(transaction_data)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to log transaction: {e}")
+            return False
     
     # ========== User Management ==========
     
@@ -86,7 +109,7 @@ class FirestoreDatabase(Database):
 
             # Handle invitation reward
             if invited_by and self.user_exists(invited_by):
-                # Reward inviter with 2 credits
+                # Reward inviter with 2 Gems
                 self.add_balance(invited_by, 2)
                 
                 # Record invitation
@@ -114,20 +137,21 @@ class FirestoreDatabase(Database):
         user = self.get_user(user_id)
         return user['balance'] if user else 0
     
-    def add_balance(self, user_id: int, amount: int) -> bool:
-        """Add credits to user balance"""
+    def add_balance(self, user_id: int, amount: int, description: str = "Balance added", metadata: Dict = None, transaction_at: datetime = None, txn_type: str = 'reward') -> bool:
+        """Add Gems to user balance"""
         try:
             user_ref = self.users_ref.document(str(user_id))
             user_ref.update({
                 'balance': firestore.Increment(amount)
             })
+            self.log_transaction(user_id, amount, txn_type, description, metadata, transaction_at)
             return True
         except Exception as e:
             logger.error(f"Failed to add balance: {e}")
             return False
     
-    def deduct_balance(self, user_id: int, amount: int) -> bool:
-        """Deduct credits from user balance"""
+    def deduct_balance(self, user_id: int, amount: int, description: str = "Balance deducted", metadata: Dict = None, transaction_at: datetime = None) -> bool:
+        """Deduct Gems from user balance"""
         user = self.get_user(user_id)
         if not user or user['balance'] < amount:
             return False
@@ -137,6 +161,7 @@ class FirestoreDatabase(Database):
             user_ref.update({
                 'balance': firestore.Increment(-amount)
             })
+            self.log_transaction(user_id, -amount, 'spend', description, metadata, transaction_at)
             return True
         except Exception as e:
             logger.error(f"Failed to deduct balance: {e}")
@@ -179,7 +204,7 @@ class FirestoreDatabase(Database):
     # ========== Check-in Management ==========
     
     def can_checkin(self, user_id: int) -> bool:
-        """Check if user can check in today"""
+        """Check if user can check in today (Cambodia Time UTC+7)"""
         user = self.get_user(user_id)
         if not user:
             return False
@@ -188,16 +213,26 @@ class FirestoreDatabase(Database):
         if not last_checkin:
             return True
         
-        # Convert date string or timestamp to datetime object
+        # Cambodia Timezone (UTC+7)
+        kh_tz = timezone(timedelta(hours=7))
+        
+        # Convert last_checkin to KH date
         if isinstance(last_checkin, str):
-            last_date = datetime.fromisoformat(last_checkin).date()
+            # Parse ISO string and move to KH timezone
+            dt = datetime.fromisoformat(last_checkin)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            last_date_kh = dt.astimezone(kh_tz).date()
         elif hasattr(last_checkin, 'timestamp'):
-            last_date = datetime.fromtimestamp(last_checkin.timestamp()).date()
+            # Convert timestamp to KH date
+            dt = datetime.fromtimestamp(last_checkin.timestamp(), tz=timezone.utc)
+            last_date_kh = dt.astimezone(kh_tz).date()
         else:
             return True
         
-        today = datetime.now().date()
-        return last_date < today
+        # Current date in Cambodia
+        today_kh = datetime.now(kh_tz).date()
+        return last_date_kh < today_kh
     
     def checkin(self, user_id: int) -> bool:
         """Perform daily check-in"""
@@ -210,6 +245,7 @@ class FirestoreDatabase(Database):
                 'last_checkin': firestore.SERVER_TIMESTAMP,
                 'balance': firestore.Increment(1)
             })
+            self.log_transaction(user_id, 1, 'checkin', 'Daily check-in')
             return True
         except Exception as e:
             logger.error(f"Check-in failed: {e}")
@@ -261,7 +297,7 @@ class FirestoreDatabase(Database):
         return None
     
     def use_card_key(self, key_code: str, user_id: int) -> Optional[int]:
-        """Use a card key, returns the amount of credits earned or error code"""
+        """Use a card key, returns the amount of Gems earned or error code"""
         # Check if key exists
         key = self.get_card_key_info(key_code)
         if not key:
@@ -289,7 +325,7 @@ class FirestoreDatabase(Database):
         
         # Use the key
         try:
-            # Add credits to user
+            # Add Gems to user
             self.add_balance(user_id, key['balance'])
             
             # Increment usage count
@@ -301,7 +337,7 @@ class FirestoreDatabase(Database):
             self.card_usage_ref.add({
                 'user_id': user_id,
                 'key_code': key_code,
-                'credits': key['balance'],
+                'Gems': key['balance'],
                 'used_at': firestore.SERVER_TIMESTAMP,
             })
             
@@ -349,4 +385,47 @@ class FirestoreDatabase(Database):
                 .order_by('created_at', direction=firestore.Query.DESCENDING)
                 .limit(limit)
                 .stream())
-        return [doc.to_dict() for doc in docs]
+        
+        verifications = []
+        for doc in docs:
+            data = doc.to_dict()
+            
+            # Convert timestamps to ISO strings
+            if data.get('created_at') and hasattr(data['created_at'], 'isoformat'):
+                data['created_at'] = data['created_at'].isoformat()
+            
+            verifications.append(data)
+        
+        logger.info(f"Retrieved {len(verifications)} verifications for user {user_id}")
+        return verifications
+
+    def get_user_transactions(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get user's transaction history from ledger"""
+        docs = (self.ledger_ref
+                .where(filter=FieldFilter('user_id', '==', user_id))
+                .order_by('created_at', direction=firestore.Query.DESCENDING)
+                .limit(limit)
+                .stream())
+        
+        transactions = []
+        for doc in docs:
+            data = doc.to_dict()
+            
+            # Convert timestamps to ISO strings
+            if data.get('created_at') and hasattr(data['created_at'], 'isoformat'):
+                data['created_at'] = data['created_at'].isoformat()
+            
+            transactions.append(data)
+        
+        logger.info(f"Retrieved {len(transactions)} transactions for user {user_id}")
+        return transactions
+
+    def trx_exists(self, trx_id: str) -> bool:
+        """Check if a transaction ID has already been processed"""
+        try:
+            # Use ledger_ref which is already defined in __init__
+            query = self.ledger_ref.where(filter=FieldFilter('trx_id', '==', trx_id)).limit(1).get()
+            return len(list(query)) > 0
+        except Exception as e:
+            logger.error(f"Error checking trx existence: {e}")
+            return False

@@ -94,9 +94,10 @@ Before deploying, make sure you have:
 Your bot now has:
 
 ✅ **All Chinese text translated to English**
-✅ **Improved document generators** (better date fields)
-✅ **3 credits per verification** (updated from 1)
-✅ **Better approval rates** (~40-60% vs ~10-20%)
+✅ **Firestore Database Integration** (Cloud persistence)
+✅ **Automated ABA Payment Tracking** (Local automation)
+✅ **"Gems" Economy System** (Consistent branding)
+✅ **Improved approval rates** (~40-60% vs ~10-20%)
 ✅ **Railway deployment ready**
 
 ---
