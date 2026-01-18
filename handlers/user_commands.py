@@ -74,7 +74,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
                 if is_milestone:
                     # Notify Admin
                     inviter = db.get_user(invited_by)
-                    inviter_name = inviter.get('full_name') or inviter.get('username') or 'Unknown'
+                    from utils.messages import escape_markdown
+                    inviter_name = escape_markdown(inviter.get('full_name') or inviter.get('username') or 'Unknown')
                     reward_detail = db.get_setting('invite_milestone_reward', INVITE_MILESTONE_REWARD)
                     
                     admin_msg = (
@@ -244,7 +245,8 @@ async def me_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Dat
         inviter_id = user_data['invited_by']
         inviter = db.get_user(inviter_id)
         if inviter:
-            inv_name = inviter.get('full_name') or inviter.get('username') or "Unknown"
+            from utils.messages import escape_markdown
+            inv_name = escape_markdown(inviter.get('full_name') or inviter.get('username') or "Unknown")
             inviter_name = f"{inviter_id} ({inv_name})"
         else:
             inviter_name = f"{inviter_id}"

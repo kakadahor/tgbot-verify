@@ -1,8 +1,19 @@
-"""Message Templates"""
 from config import (
     VERIFY_COST, ADMIN_SUPPORT_LINK,
     ABA_PAYMENT_LINK
 )
+
+
+def escape_markdown(text: str) -> str:
+    """Escape special characters for Telegram Markdown (V1)"""
+    if not text:
+        return ""
+    # Characters to escape: _, *, `, [
+    # Note: We are using Markdown V1 in reply_text(..., parse_mode="Markdown")
+    chars = ['_', '*', '`', '[']
+    for char in chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
 
 def get_welcome_message(full_name: str, invited_by: bool = False, is_new_user: bool = True) -> str:

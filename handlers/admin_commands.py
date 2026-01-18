@@ -900,10 +900,12 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
                 # Build user list message
                 message = f"📋 **Last {len(recent_users)} Recent Active Users**\n\n"
                 
+                from utils.messages import escape_markdown
+                
                 for idx, user in enumerate(recent_users, 1):
                     user_id_str = user.get('user_id', 'N/A')
-                    username = user.get('username', 'N/A')
-                    full_name = user.get('full_name', 'N/A')
+                    username = escape_markdown(user.get('username', 'N/A'))
+                    full_name = escape_markdown(user.get('full_name', 'N/A'))
                     balance = user.get('balance', 0)
                     
                     # Parse dates
@@ -931,7 +933,7 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
                         inviter_id = user['invited_by']
                         inviter = db.get_user(inviter_id)
                         if inviter:
-                            inviter_name = inviter.get('full_name') or inviter.get('username') or 'Unknown'
+                            inviter_name = escape_markdown(inviter.get('full_name') or inviter.get('username') or 'Unknown')
                             invited_by_text = f"{inviter_id} ({inviter_name})"
                         else:
                             invited_by_text = f"{inviter_id}"
