@@ -95,11 +95,19 @@ async def aba_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 logger.info(f"Processing TEST transaction as requested in dev mode: {trx_id}")
 
-        # 5. Security Check: Verify Merchant Name (Contains check is safer)
-        if "K.HOR" not in message_text and "KCK" not in message_text:
-            print(f"[PAYMENT_HANDLER] SECURITY: Unknown merchant for {trx_id}")
-            logger.warning(f"SECURITY: Blocked transaction with unknown merchant name: {trx_id}")
-            return
+        # 5. Security Check: Verify Merchant Name based on Environment
+        is_test_merchant = "KCK" in message_text
+        is_live_merchant = "K.HOR" in message_text and not is_test_merchant
+
+        from config import ENVIRONMENT
+        if ENVIRONMENT == "production":
+            if not is_live_merchant:
+                print(f"[PAYMENT_HANDLER] SECURITY: Production bot ignoring merchant (found: {message_text[:30]}...)")
+                return
+        else:
+            if not is_test_merchant:
+                print(f"[PAYMENT_HANDLER] SECURITY: Test bot ignoring merchant (found: {message_text[:30]}...)")
+                return
 
         # 6. Transaction Time: Matches "Time: 17-Jan-2026 08:32:43"
         transaction_at = None
