@@ -1,6 +1,6 @@
 """Message Templates"""
 from config import (
-    VERIFY_COST, HELP_NOTION_URL, ADMIN_SUPPORT_LINK,
+    VERIFY_COST, ADMIN_SUPPORT_LINK,
     ABA_PAYMENT_LINK
 )
 
@@ -20,7 +20,7 @@ def get_welcome_message(full_name: str, invited_by: bool = False, is_new_user: b
         "Gems are the 'energy' used to power verifications. Each verification costs **5 Gems**.\n\n"
         
         "**💰 HOW TO EARN GEMS?**\n"
-        "1. 👥 **Invite Friends (BEST)**: Send /invite and get **+2 Gems** for every person who joins!\n"
+        "1. 👥 **Invite Friends (BEST)**: Send /invite and get **+2 Gems** for every person who joins! (Plus **milestone bonuses** 🎁)\n"
         "2. ✅ **Daily Check-in**: Use /checkin to get **+1 Gem** every single day.\n"
         "3. 💳 **Top-up**: Need Gems instantly? Use /topup to buy via ABA or USDT.\n"
         "4. 📋 **See our Services**: Send /services to see all supported services and pricing.\n\n"
@@ -73,12 +73,13 @@ def get_help_message(is_admin: bool = False) -> str:
         "**🎯 VERIFICATION**\n"
         f"• /verify `<link>` - Start verification ({VERIFY_COST} Gems)\n"
         "• /services - View all services & pricing\n"
-        "• /myjobs - Check verification status\n\n"
+        "• /myjobs - Check verification status\n"
+        "💡 *Tip: ChatGPT works best with school email*\n\n"
         
         "**💎 GEMS & BALANCE**\n"
         "• /me - View profile & balance\n"
         "• /checkin - Daily check-in (+1 Gem)\n"
-        "• /invite - Invite friends (+2 Gems/person)\n"
+        "• /invite - Invite friends (+2 Gems + Milestone Bonuses! 🎁)\n"
         "• /use `<key>` - Redeem voucher code\n"
         "• /lsgd - Transaction history\n\n"
         
@@ -137,7 +138,7 @@ def get_verify_usage_message(command: str, service_name: str) -> str:
     )
 
 
-def get_profile_message(user_data: dict) -> str:
+def get_profile_message(user_data: dict, inviter_name: str = "Direct", invited_count: int = 0) -> str:
     """Get the user profile message"""
     user_id = user_data.get('user_id', 'Unknown')
     full_name = user_data.get('full_name', 'Unknown')
@@ -157,6 +158,9 @@ def get_profile_message(user_data: dict) -> str:
         "━━━━━━━━━━━━━━━━━━\n"
         f"💎 **Balance:** `{balance} Gems`\n"
         f"📅 **Joined:** `{created_at}`\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"🔗 **Invited By:** {inviter_name}\n"
+        f"👥 **Invited Users:** `{invited_count}` people\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "💡 *Use /topup to add more Gems!*"
     )
@@ -218,7 +222,8 @@ def get_pricing_menu(balance: int) -> str:
         f"4️⃣ Bolt.new Teacher: `{SERVICE_COSTS.get('bolt_teacher', 5)} Gems` (`/verify4`)\n"
         f"5️⃣ YouTube Student: `{SERVICE_COSTS.get('youtube_student', 4)} Gems` (`/verify5`)\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "💡 **How to verify:**\n"
+        "💡 **Tip:** ChatGPT works best with school email addresses\n\n"
+        "📖 **How to verify:**\n"
         "Use the specific command followed by your SheerID link.\n"
         "Example: `/verify2 https://services.sheerid.com/verify/...`"
     )

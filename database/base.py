@@ -135,3 +135,35 @@ class Database(ABC):
     def get_user_verifications(self, user_id: int, limit: int = 10) -> List[Dict]:
         """Get user's verification history"""
         pass
+
+    @abstractmethod
+    def get_user_transactions(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get user's transaction history"""
+        pass
+
+    @abstractmethod
+    def get_user_stats(self) -> Dict:
+        """Get user statistics (total users, active users, etc.)"""
+        pass
+
+    @abstractmethod
+    def get_recent_users(self, limit: int = 10) -> List[Dict]:
+        """Get recent active users ordered by last activity"""
+        pass
+
+    # Settings Management
+    @abstractmethod
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        """Get a setting value by key"""
+        pass
+
+    @abstractmethod
+    def set_setting(self, key: str, value: Any) -> bool:
+        """Set a setting value by key"""
+        pass
+
+    @abstractmethod
+    def get_invite_count(self, user_id: int) -> int:
+        """Get the number of users invited by this user"""
+        pass
+

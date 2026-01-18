@@ -53,6 +53,49 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
     if db.create_user(user_id, username, full_name, invited_by):
         welcome_msg = get_welcome_message(full_name, bool(invited_by), is_new_user=True)
         await update.message.reply_text(welcome_msg, parse_mode="Markdown")
+        
+        # Check if inviter reached a milestone
+        if invited_by:
+            try:
+                # Use setting if available, otherwise fallback to config
+                from config import INVITE_ALERT_THRESHOLD, ADMIN_USER_ID
+                threshold = db.get_setting('invite_alert_threshold', INVITE_ALERT_THRESHOLD)
+                
+                invite_count = db.get_invite_count(invited_by)
+                
+                # Doubling milestone logic (Threshold, 2x, 4x, 8x...)
+                # Check if (invite_count / threshold) is a power of 2
+                is_milestone = False
+                if invite_count >= threshold and invite_count % threshold == 0:
+                    ratio = invite_count // threshold
+                    if ratio > 0 and (ratio & (ratio - 1)) == 0:
+                        is_milestone = True
+
+                if is_milestone:
+                    # Notify Admin
+                    inviter = db.get_user(invited_by)
+                    inviter_name = inviter.get('full_name') or inviter.get('username') or 'Unknown'
+                    reward_detail = db.get_setting('invite_milestone_reward', INVITE_MILESTONE_REWARD)
+                    
+                    admin_msg = (
+                        "🎊 **Referral Milestone Reached!**\n\n"
+                        f"👤 **User:** {inviter_name} (`{invited_by}`)\n"
+                        f"📈 **Total Invitations:** `{invite_count}`\n"
+                        f"🎯 **Milestone Range:** `{threshold} (Doubling Logic)`\n"
+                        f"🎁 **Reward To Process:** `{reward_detail}`\n\n"
+                        "This user has reached a doubling referral milestone! 🚀"
+                    )
+                    
+                    try:
+                        await context.bot.send_message(
+                            chat_id=ADMIN_USER_ID,
+                            text=admin_msg,
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify admin about referral milestone: {e}")
+            except Exception as e:
+                logger.error(f"Error checking referral milestone: {e}")
     else:
         await update.message.reply_text("Registration failed. Please try again later.")
 
@@ -134,15 +177,21 @@ async def invite_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db:
 
 
     # Invite logic
-
     bot_username = context.bot.username
     invite_link = f"https://t.me/{bot_username}?start={user_id}"
 
-    await update.message.reply_text(
+    # Get threshold and reward for note
+    from config import INVITE_ALERT_THRESHOLD, INVITE_MILESTONE_REWARD
+    threshold = db.get_setting('invite_alert_threshold', INVITE_ALERT_THRESHOLD)
+    reward = db.get_setting('invite_milestone_reward', INVITE_MILESTONE_REWARD)
+
+    msg = (
         f"🎁 **Your exclusive invitation link:**\n`{invite_link}`\n\n"
-        "You will receive **2 Gems** for every successfully registered person you invite.",
-        parse_mode="Markdown"
+        "You will receive **2 Gems** for every successfully registered person you invite.\n"
+        f"💡 *Note: Reach `{threshold}` invitations to unlock exclusive milestone rewards!*"
     )
+
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 @global_checks()
@@ -187,12 +236,28 @@ async def me_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Dat
         return
 
     user_id = update.effective_user.id
-
-    # Me logic
-    user = db.get_user(user_id)
+    user_data = db.get_user(user_id)
+    
+    # Get inviter info
+    inviter_name = "Direct"
+    if user_data.get('invited_by'):
+        inviter_id = user_data['invited_by']
+        inviter = db.get_user(inviter_id)
+        if inviter:
+            inv_name = inviter.get('full_name') or inviter.get('username') or "Unknown"
+            inviter_name = f"{inviter_id} ({inv_name})"
+        else:
+            inviter_name = f"{inviter_id}"
+            
+    # Get invite count
+    try:
+        invited_count = db.get_invite_count(user_id)
+    except Exception as e:
+        logger.error(f"Error getting invite count in me_command for {user_id}: {e}")
+        invited_count = 0
 
     await update.message.reply_text(
-        get_profile_message(user),
+        get_profile_message(user_data, inviter_name, invited_count),
         parse_mode="Markdown"
     )
 
@@ -478,7 +543,7 @@ async def guide_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             "2. Click 'Get Started'\n"
             "3. Fill in your student information\n"
             "4. Copy the SheerID verification URL\n"
-            f"5. Send to bot: `/verify <url>` ({cost} Gems)\n\n"
+            f"5. Send to bot: `/verify3 <url>` ({cost} Gems)\n\n"
             "**✨ What You Get:**\n"
             "• Ad-free music streaming\n"
             "• Offline downloads\n"
@@ -496,7 +561,7 @@ async def guide_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             "2. Click 'Try it free' or 'Learn more'\n"
             "3. Complete student verification\n"
             "4. Copy the SheerID verification URL\n"
-            f"5. Send to bot: `/verify <url>` ({cost} Gems)\n\n"
+            f"5. Send to bot: `/verify5 <url>` ({cost} Gems)\n\n"
             "**✨ What You Get:**\n"
             "• Ad-free YouTube videos\n"
             "• Background playback\n"
@@ -515,15 +580,19 @@ async def guide_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             "2. Click teacher verification link\n"
             "3. Fill in your teaching credentials\n"
             "4. Copy the SheerID verification URL\n"
-            f"5. Send to bot: `/verify <url>` ({cost} Gems)\n\n"
+            f"5. Send to bot: `/verify2 <url>` ({cost} Gems)\n\n"
             "**✨ What You Get:**\n"
             "• ChatGPT Plus features\n"
             "• GPT-4 access\n"
             "• Priority access during peak times\n\n"
-            "**💡 Tips:**\n"
-            "• Must be K-12 educator\n"
-            "• Provide school email if available\n"
-            "• Free for verified teachers"
+            "**💡 Helpful Tips:**\n"
+            "• School email is **recommended** for faster verification\n"
+            "• Personal emails (Gmail, Yahoo, etc.) might take longer or may not work\n"
+            "• Using your official school email (.edu or school domain) typically gives instant results\n\n"
+            "**📚 Additional Info:**\n"
+            "• For K-12 educators\n"
+            "• Free for verified teachers\n"
+            "• Verification usually completes within minutes"
         ),
         "bolt": (
             "📘 **Bolt.new Teacher Verification Guide**\n"
@@ -533,7 +602,7 @@ async def guide_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             "2. Look for teacher/educator discount\n"
             "3. Start verification process\n"
             "4. Copy the SheerID verification URL\n"
-            f"5. Send to bot: `/verify <url>` ({cost} Gems)\n\n"
+            f"5. Send to bot: `/verify4 <url>` ({cost} Gems)\n\n"
             "**✨ What You Get:**\n"
             "• AI-powered coding assistant\n"
             "• Full-stack web development\n"

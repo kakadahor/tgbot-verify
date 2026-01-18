@@ -39,6 +39,7 @@ class FirestoreDatabase(Database):
         self.card_usage_ref = self.db.collection(FS_COLLECTIONS['card_key_usage'])
         self.invitations_ref = self.db.collection(FS_COLLECTIONS['invitations'])
         self.ledger_ref = self.db.collection(FS_COLLECTIONS['ledger'])
+        self.settings_ref = self.db.collection(FS_COLLECTIONS['settings'])
         
         logger.info(f"Firestore database initialized (Env: {FS_COLLECTIONS['users']})")
     
@@ -394,6 +395,7 @@ class FirestoreDatabase(Database):
         verifications = []
         for doc in docs:
             data = doc.to_dict()
+            data['id'] = doc.id  # Add document ID for consistency with MySQL
             
             # Convert timestamps to ISO strings
             if data.get('created_at') and hasattr(data['created_at'], 'isoformat'):
@@ -415,10 +417,13 @@ class FirestoreDatabase(Database):
         transactions = []
         for doc in docs:
             data = doc.to_dict()
+            data['id'] = doc.id  # Add document ID for consistency with MySQL
             
             # Convert timestamps to ISO strings
             if data.get('created_at') and hasattr(data['created_at'], 'isoformat'):
                 data['created_at'] = data['created_at'].isoformat()
+            if data.get('transaction_at') and hasattr(data['transaction_at'], 'isoformat'):
+                data['transaction_at'] = data['transaction_at'].isoformat()
             
             transactions.append(data)
         
@@ -434,3 +439,100 @@ class FirestoreDatabase(Database):
         except Exception as e:
             logger.error(f"Error checking trx existence: {e}")
             return False
+
+    def get_user_stats(self) -> Dict:
+        """Get user statistics"""
+        try:
+            stats = {}
+            users = list(self.users_ref.stream())
+            stats['total_users'] = len(users)
+            
+            from datetime import timedelta, timezone
+            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+            active_count = 0
+            total_gems = 0
+            blocked_count = 0
+            
+            for user_doc in users:
+                user_data = user_doc.to_dict()
+                total_gems += user_data.get('balance', 0)
+                if user_data.get('is_blocked'):
+                    blocked_count += 1
+                
+                last_checkin = user_data.get('last_checkin')
+                if last_checkin and hasattr(last_checkin, 'timestamp'):
+                    checkin_dt = datetime.fromtimestamp(last_checkin.timestamp(), tz=timezone.utc)
+                    if checkin_dt >= seven_days_ago:
+                        active_count += 1
+            
+            stats['active_users'] = active_count
+            stats['total_gems'] = total_gems
+            stats['blocked_users'] = blocked_count
+            
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            new_today = sum(1 for user_doc in users 
+                          if user_doc.to_dict().get('created_at') and 
+                          hasattr(user_doc.to_dict()['created_at'], 'timestamp') and
+                          datetime.fromtimestamp(user_doc.to_dict()['created_at'].timestamp(), tz=timezone.utc) >= today_start)
+            stats['new_users_today'] = new_today
+            
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            return {'total_users': 0, 'active_users': 0, 'total_gems': 0, 'blocked_users': 0, 'new_users_today': 0}
+
+    def get_recent_users(self, limit: int = 10) -> List[Dict]:
+        """Get recent active users ordered by last activity"""
+        try:
+            users_list = []
+            for doc in self.users_ref.stream():
+                data = doc.to_dict()
+                data['user_id'] = int(doc.id)
+                last_activity = data.get('last_checkin') or data.get('created_at')
+                data['_sort_key'] = last_activity.timestamp() if last_activity and hasattr(last_activity, 'timestamp') else 0
+                if data.get('created_at') and hasattr(data['created_at'], 'isoformat'):
+                    data['created_at'] = data['created_at'].isoformat()
+                if data.get('last_checkin') and hasattr(data['last_checkin'], 'isoformat'):
+                    data['last_checkin'] = data['last_checkin'].isoformat()
+                users_list.append(data)
+            
+            users_list.sort(key=lambda x: x['_sort_key'], reverse=True)
+            recent_users = users_list[:limit]
+            for user in recent_users:
+                user.pop('_sort_key', None)
+            return recent_users
+        except Exception as e:
+            logger.error(f"Error getting recent users: {e}")
+            return []
+
+    # ========== Settings Management ==========
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        """Get a setting value by key"""
+        try:
+            doc = self.settings_ref.document(key).get()
+            if doc.exists:
+                return doc.to_dict().get('value', default)
+            return default
+        except Exception as e:
+            logger.error(f"Failed to get setting {key}: {e}")
+            return default
+
+    def set_setting(self, key: str, value: Any) -> bool:
+        """Set a setting value by key"""
+        try:
+            self.settings_ref.document(key).set({'value': value})
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set setting {key}: {e}")
+            return False
+
+    def get_invite_count(self, user_id: int) -> int:
+        """Get the number of users invited by this user"""
+        try:
+            docs = self.users_ref.where(filter=FieldFilter('invited_by', '==', user_id)).stream()
+            return sum(1 for _ in docs)
+        except Exception as e:
+            logger.error(f"Failed to get invite count for {user_id}: {e}")
+            return 0
+

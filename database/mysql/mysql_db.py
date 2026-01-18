@@ -207,6 +207,17 @@ class MySQLDatabase:
                 """
             )
 
+            # Settings Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    `key` VARCHAR(255) PRIMARY KEY,
+                    `value` TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+
             conn.commit()
             logger.info("MySQL database tables initialized successfully")
 
@@ -468,7 +479,7 @@ class MySQLDatabase:
             cursor.close()
             conn.close()
 
-    def get_user_verifications(self, user_id: int) -> List[Dict]:
+    def get_user_verifications(self, user_id: int, limit: int = 10) -> List[Dict]:
         """Get user verification records"""
         conn = self.get_connection()
         cursor = conn.cursor(DictCursor)
@@ -479,10 +490,40 @@ class MySQLDatabase:
                 SELECT * FROM verifications
                 WHERE user_id = %s
                 ORDER BY created_at DESC
+                LIMIT %s
                 """,
-                (user_id,),
+                (user_id, limit),
             )
             return list(cursor.fetchall())
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_user_transactions(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get user transaction history from ledger"""
+        conn = self.get_connection()
+        cursor = conn.cursor(DictCursor)
+
+        try:
+            cursor.execute(
+                """
+                SELECT * FROM ledger
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (user_id, limit),
+            )
+            results = list(cursor.fetchall())
+            
+            # Convert datetime objects to ISO format strings
+            for row in results:
+                if row.get('created_at'):
+                    row['created_at'] = row['created_at'].isoformat()
+                if row.get('transaction_at'):
+                    row['transaction_at'] = row['transaction_at'].isoformat()
+            
+            return results
         finally:
             cursor.close()
             conn.close()
@@ -628,7 +669,140 @@ class MySQLDatabase:
             cursor.close()
             conn.close()
 
+    def get_user_stats(self) -> Dict:
+        """Get user statistics"""
+        conn = self.get_connection()
+        cursor = conn.cursor(DictCursor)
+
+        try:
+            stats = {}
+            
+            # Total users
+            cursor.execute("SELECT COUNT(*) as total FROM users")
+            stats['total_users'] = cursor.fetchone()['total']
+            
+            # Active users (checked in within last 7 days)
+            cursor.execute("""
+                SELECT COUNT(*) as active 
+                FROM users 
+                WHERE last_checkin >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            """)
+            stats['active_users'] = cursor.fetchone()['active']
+            
+            # Total gems in circulation
+            cursor.execute("SELECT SUM(balance) as total_gems FROM users")
+            stats['total_gems'] = cursor.fetchone()['total_gems'] or 0
+            
+            # Blocked users
+            cursor.execute("SELECT COUNT(*) as blocked FROM users WHERE is_blocked = 1")
+            stats['blocked_users'] = cursor.fetchone()['blocked']
+            
+            # New users today
+            cursor.execute("""
+                SELECT COUNT(*) as new_today 
+                FROM users 
+                WHERE DATE(created_at) = CURDATE()
+            """)
+            stats['new_users_today'] = cursor.fetchone()['new_today']
+            
+            return stats
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_recent_users(self, limit: int = 10) -> List[Dict]:
+        """Get recent active users ordered by last check-in or creation date"""
+        conn = self.get_connection()
+        cursor = conn.cursor(DictCursor)
+
+        try:
+            cursor.execute("""
+                SELECT user_id, username, full_name, balance, created_at, last_checkin
+                FROM users
+                ORDER BY COALESCE(last_checkin, created_at) DESC
+                LIMIT %s
+            """, (limit,))
+            
+            results = list(cursor.fetchall())
+            
+            # Convert datetime objects to ISO format strings
+            for row in results:
+                if row.get('created_at'):
+                    row['created_at'] = row['created_at'].isoformat()
+                if row.get('last_checkin'):
+                    row['last_checkin'] = row['last_checkin'].isoformat()
+            
+            return results
+        finally:
+            cursor.close()
+            conn.close()
+
+    # ========== Settings Management ==========
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        """Get a setting value by key"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor(DictCursor)
+            
+            cursor.execute("SELECT `value` FROM settings WHERE `key` = %s", (key,))
+            result = cursor.fetchone()
+            
+            cursor.close()
+            conn.close()
+            
+            if result:
+                import json
+                try:
+                    return json.loads(result['value'])
+                except:
+                    return result['value']
+            return default
+        except Exception as e:
+            logger.error(f"Failed to get setting {key}: {e}")
+            return default
+
+    def set_setting(self, key: str, value: Any) -> bool:
+        """Set a setting value by key"""
+        try:
+            import json
+            # Only json dumps if not a string
+            value_str = json.dumps(value) if not isinstance(value, str) else value
+            
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            query = """
+                INSERT INTO settings (`key`, `value`) 
+                VALUES (%s, %s) 
+                ON DUPLICATE KEY UPDATE `value` = %s
+            """
+            cursor.execute(query, (key, value_str, value_str))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set setting {key}: {e}")
+            return False
+
+    def get_invite_count(self, user_id: int) -> int:
+        """Get the number of users invited by this user"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM users WHERE invited_by = %s", (user_id,))
+            count = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+            return count
+        except Exception as e:
+            logger.error(f"Failed to get invite count for {user_id}: {e}")
+            return 0
+
 
 # Create alias for global instance to maintain compatibility with SQLite version
 Database = MySQLDatabase
+
 

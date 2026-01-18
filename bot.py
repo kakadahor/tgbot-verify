@@ -40,6 +40,7 @@ from handlers.verify_commands import (
 )
 from handlers.admin_commands import (
     addgems_command,
+    deductgems_command,
     block_command,
     white_command,
     blacklist_command,
@@ -48,6 +49,11 @@ from handlers.admin_commands import (
     broadcast_command,
     approve_command,
     reject_command,
+    user_command,
+    usertrans_command,
+    userjobs_command,
+    users_command,
+    setinvitealert_command,
 )
 from handlers.payment_automation import aba_payment_handler, receipt_photo_handler
 from telegram.ext import MessageHandler, filters
@@ -132,6 +138,7 @@ def main():
 
     # Register admin commands
     application.add_handler(CommandHandler("addgems", partial(addgems_command, db=db)))
+    application.add_handler(CommandHandler("deductgems", partial(deductgems_command, db=db)))
     application.add_handler(CommandHandler("block", partial(block_command, db=db)))
     application.add_handler(CommandHandler("white", partial(white_command, db=db)))
     application.add_handler(CommandHandler("blacklist", partial(blacklist_command, db=db)))
@@ -140,6 +147,11 @@ def main():
     application.add_handler(CommandHandler("broadcast", partial(broadcast_command, db=db)))
     application.add_handler(CommandHandler("approve", partial(approve_command, db=db)))
     application.add_handler(CommandHandler("reject", partial(reject_command, db=db)))
+    application.add_handler(CommandHandler("user", partial(user_command, db=db)))
+    application.add_handler(CommandHandler("usertrans", partial(usertrans_command, db=db)))
+    application.add_handler(CommandHandler("userjobs", partial(userjobs_command, db=db)))
+    application.add_handler(CommandHandler("users", partial(users_command, db=db)))
+    application.add_handler(CommandHandler("setinvitealert", partial(setinvitealert_command, db=db)))
 
     # Register message handlers (Automation & Receipts)
     # Using a broader filter to ensure we catch linked channel posts in the supergroup
@@ -187,14 +199,20 @@ def main():
         # 2. Commands for ADMIN (will show in the Private Chat with bot)
         admin_commands = user_commands + [
             BotCommand("addgems", "💰 [Admin] Add Gems to User"),
+            BotCommand("deductgems", "💸 [Admin] Deduct Gems from User"),
             BotCommand("approve", "✅ [Admin] Approve Payment"),
             BotCommand("reject", "❌ [Admin] Reject Payment"),
             BotCommand("block", "🚫 [Admin] Block User"),
             BotCommand("white", "✅ [Admin] Unblock User"),
             BotCommand("blacklist", "📋 [Admin] View Blacklist"),
-            BotCommand("genkey", "� [Admin] Generate Card Key"),
+            BotCommand("genkey", "🔑 [Admin] Generate Card Key"),
             BotCommand("listkeys", "📜 [Admin] List All Card Keys"),
-            BotCommand("broadcast", "�📣 [Admin] Send message to all"),
+            BotCommand("broadcast", "📣 [Admin] Send message to all"),
+            BotCommand("user", "👤 [Admin] View User Details"),
+            BotCommand("usertrans", "💳 [Admin] View User Transactions"),
+            BotCommand("userjobs", "🔍 [Admin] View User Jobs"),
+            BotCommand("users", "📊 [Admin] User Statistics & List"),
+            BotCommand("setinvitealert", "🔔 [Admin] Set Referral Milestone"),
         ]
         try:
             await application.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_USER_ID))
@@ -206,6 +224,7 @@ def main():
             BotCommand("approve", "✅ /approve <user_id> <amount> OR <user_id> <trx_id> <amount>"),
             BotCommand("reject", "❌ Reply to proof: /reject [reason]"),
             BotCommand("addgems", "💰 Add Gems: /addgems <id> <amount>"),
+            BotCommand("setinvitealert", "🔔 Set Milestone: /setinvitealert <n>"),
         ]
         try:
             await application.bot.set_my_commands(group_commands, scope=BotCommandScopeChat(chat_id=ABA_NOTIFICATION_GROUP_ID))
