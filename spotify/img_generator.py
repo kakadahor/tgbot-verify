@@ -362,18 +362,14 @@ def generate_image(first_name, last_name, school_id='2565'):
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                timeout=90000,  # 90 second timeout for Cloud Run
+                timeout=90000,
                 args=[
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--disable-software-rasterizer',
+                    '--no-zygote',
                     '--disable-extensions',
-                    '--disable-accelerated-2d-canvas',
-                    '--disable-web-security',
-                    '--single-process',
-                    '--disable-features=VizDisplayCompositor',
                 ]
             )
             page = browser.new_page(viewport={'width': 1200, 'height': 900})
