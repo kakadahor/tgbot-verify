@@ -4,7 +4,7 @@
 
 ### ⚠️ MANDATORY: Always Commit to Main First
 
-**NEVER push directly to production branch!**
+**NEVER push directly to production branch (without user's confirmation)!**
 
 The correct deployment workflow is:
 
