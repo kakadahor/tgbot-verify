@@ -32,13 +32,18 @@ def _get_browser_context():
             playwright = sync_playwright().start()
             browser = playwright.chromium.launch(
                 headless=True,
-                timeout=60000,  # 60 second timeout instead of default 180s
+                timeout=90000,  # 90 second timeout for Cloud Run
                 args=[
                     '--no-sandbox',
+                    '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
                     '--disable-software-rasterizer',
                     '--disable-extensions',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-web-security',
+                    '--single-process',
+                    '--disable-features=VizDisplayCompositor',
                 ]
             )
             _browser_context = browser.new_context(
@@ -530,13 +535,18 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
-                timeout=60000,  # 60 second timeout instead of default 180s
+                timeout=90000,  # 90 second timeout for Cloud Run
                 args=[
                     '--no-sandbox',
+                    '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
                     '--disable-software-rasterizer',
                     '--disable-extensions',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-web-security',
+                    '--single-process',
+                    '--disable-features=VizDisplayCompositor',
                 ]
             )
             context = await browser.new_context(

@@ -42,6 +42,7 @@ git checkout main
 - Builds Docker image and deploys to Cloud Run
 - Region: `asia-southeast1`
 - Service: `tgbot-verify`
+- Resources: 4Gi Memory, 2 CPU (Required for Chromium)
 
 ### Required GitHub Secrets
 
