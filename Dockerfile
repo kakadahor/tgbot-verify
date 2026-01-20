@@ -30,19 +30,21 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. System dependencies (including dumb-init and wget)
+# 2. System dependencies (for WeasyPrint and general tools)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     dumb-init \
-    wget \
-    gnupg \
-    && rm -rf /var/lib/apt/lists/*
-
-# 3. Install Google Chrome Stable
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable --no-install-recommends \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    python3-cffi \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and build tools

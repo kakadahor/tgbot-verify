@@ -168,17 +168,21 @@ def generate_html(first_name, last_name, school_id='2565'):
             font-weight: bold;
         }}
 
-        /* 学生信息卡片 */
-        .student-card {{
+        /* 学生信息卡片 (WeasyPrint: Use Flex instead of Grid for better stability) */
+        .student-card {
             background: #fcfcfc;
             border: 1px solid #e0e0e0;
             padding: 15px;
             margin-bottom: 25px;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            display: flex;
+            flex-wrap: wrap;
             gap: 20px;
             font-size: 13px;
-        }}
+        }
+        .student-card > div {
+            flex: 1;
+            min-width: 150px;
+        }
         .info-label {{ color: #777; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }}
         .info-val {{ font-weight: bold; color: #333; font-size: 14px; }}
         .status-badge {{
@@ -376,35 +380,18 @@ def generate_image(first_name, last_name, school_id='2565'):
         bytes: PNG image data
     """
     try:
-        from playwright.sync_api import sync_playwright
-
+        from weasyprint import HTML
+        
         # Generate HTML
         html_content = generate_html(first_name, last_name, school_id)
-
-        # Use Playwright for screenshots (replaces Selenium)
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=False,  # Set to False to allow manual flag
-                timeout=90000,
-                channel='chrome',
-                args=[
-                    '--headless=new',  # Use modern Headless mode
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                ]
-            )
-            page = browser.new_page(viewport={'width': 1200, 'height': 900})
-            page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
-            page.wait_for_timeout(500)  # Wait for styles to load
-            screenshot_bytes = page.screenshot(type='png', full_page=True, timeout=60000)
-            browser.close()
-
-        return screenshot_bytes
+        
+        # Render HTML to PNG using WeasyPrint (No browser needed)
+        # We specify a resolution of 150 to ensure good quality
+        png_bytes = HTML(string=html_content).write_png(resolution=150)
+        return png_bytes
 
     except ImportError:
-        raise Exception("playwright required: pip install playwright && playwright install chromium")
+        raise Exception("weasyprint required: pip install weasyprint")
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 

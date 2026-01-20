@@ -353,35 +353,17 @@ def generate_image(first_name, last_name, school_id='2565'):
         bytes: PNG image data
     """
     try:
-        from playwright.sync_api import sync_playwright
-
+        from weasyprint import HTML
+        
         # Generate HTML
         html_content = generate_html(first_name, last_name, school_id)
-
-        # Use Playwright for screenshots (replaces Selenium)
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=False,  # Set to False to allow manual flag
-                timeout=90000,
-                channel='chrome',
-                args=[
-                    '--headless=new',  # Use modern Headless mode
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                ]
-            )
-            page = browser.new_page(viewport={'width': 1200, 'height': 900})
-            page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
-            page.wait_for_timeout(500)  # Wait for styles to load
-            screenshot_bytes = page.screenshot(type='png', full_page=True, timeout=60000)
-            browser.close()
-
-        return screenshot_bytes
+        
+        # Render HTML to PNG using WeasyPrint
+        png_bytes = HTML(string=html_content).write_png(resolution=150)
+        return png_bytes
 
     except ImportError:
-        raise Exception("playwright required: pip install playwright && playwright install chromium")
+        raise Exception("weasyprint required: pip install weasyprint")
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 

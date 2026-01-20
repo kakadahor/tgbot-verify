@@ -9,3 +9,4 @@ psutil>=5.9.0
 python-dotenv>=1.0.0
 google-cloud-firestore>=2.14.0
 easyocr>=1.7.0
+weasyprint>=62.0

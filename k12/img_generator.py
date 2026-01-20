@@ -49,37 +49,16 @@ def generate_teacher_pdf(first_name: str, last_name: str) -> bytes:
 
 
 def generate_teacher_png(first_name: str, last_name: str) -> bytes:
-    """Use Playwright to generate PNG screenshot (requires playwright + chromium installed)."""
+    """Use WeasyPrint to generate PNG screenshot."""
     try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
-        raise RuntimeError(
-            "playwright required, run `pip install playwright` then `playwright install chromium`"
-        ) from exc
-
-    html = _render_template(first_name, last_name)
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=False,  # Set to False to allow manual flag
-            timeout=90000,
-            channel='chrome',
-            args=[
-                '--headless=new',  # Use modern Headless mode
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-            ]
-        )
-        page = browser.new_page(viewport={"width": 1200, "height": 1000})
-        page.set_content(html, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(500)  # Let styles stabilize
-        card = page.locator(".browser-mockup")
-        png_bytes = card.screenshot(type="png", timeout=60000)
-        browser.close()
-
-    return png_bytes
+        from weasyprint import HTML
+        html = _render_template(first_name, last_name)
+        # Scale 2x for quality (resolution=150)
+        return HTML(string=html).write_png(resolution=150)
+    except ImportError:
+        raise Exception("weasyprint required: pip install weasyprint")
+    except Exception as e:
+        raise Exception(f"Image generation failed: {str(e)}")
 
 
 # Backward compatibility: default to PDF generation

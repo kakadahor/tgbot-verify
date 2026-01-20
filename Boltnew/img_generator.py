@@ -19,64 +19,15 @@ def generate_psu_email(first_name, last_name):
     return email
 
 
-_browser_context = None
-_page_pool = []
-
-
-def _get_browser_context():
-    """Get or create browser context (singleton pattern)"""
-    global _browser_context
-    if _browser_context is None:
-        try:
-            from playwright.sync_api import sync_playwright
-            playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(
-                headless=False,  # Set to False to allow manual flag
-                timeout=90000,
-                channel='chrome',
-                args=[
-                    '--headless=new',  # Use modern Headless mode
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                ]
-            )
-            _browser_context = browser.new_context(
-                viewport={'width': 1200, 'height': 1200},
-                device_scale_factor=2,
-            )
-        except ImportError:
-            raise Exception("playwright required: pip install playwright && playwright install chromium")
-    return _browser_context
 
 
 def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> bytes:
-    """Convert HTML to PNG screenshot (optimized: reuse browser instance)"""
+    """Convert HTML to PNG screenshot using WeasyPrint (No browser needed)"""
     try:
-        context = _get_browser_context()
-        page = context.new_page()
-
-        try:
-            # Set HTML content directly, use domcontentloaded instead of networkidle (faster)
-            page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
-
-            # Wait for images to load (if there are external images)
-            page.wait_for_load_state('load', timeout=3000)
-
-            # Auto-calculate height
-            if height is None:
-                height = page.evaluate(
-                    "Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
-                )
-
-            page.set_viewport_size({'width': width, 'height': height})
-
-            # Take screenshot
-            screenshot_bytes = page.screenshot(type='png', full_page=True, timeout=60000)
-            return screenshot_bytes
-        finally:
-            page.close()
+        from weasyprint import HTML
+        # WeasyPrint handles dynamic height automatically
+        # resolution=150 gives approximately 2x scaling (assuming default 96dpi)
+        return HTML(string=html_content).write_png(resolution=150)
 
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
