@@ -169,7 +169,7 @@ def generate_html(first_name, last_name, school_id='2565'):
         }}
 
         /* 学生信息卡片 (WeasyPrint: Use Flex instead of Grid for better stability) */
-        .student-card {
+        .student-card {{
             background: #fcfcfc;
             border: 1px solid #e0e0e0;
             padding: 15px;
@@ -178,11 +178,11 @@ def generate_html(first_name, last_name, school_id='2565'):
             flex-wrap: wrap;
             gap: 20px;
             font-size: 13px;
-        }
-        .student-card > div {
+        }}
+        .student-card > div {{
             flex: 1;
             min-width: 150px;
-        }
+        }}
         .info-label {{ color: #777; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }}
         .info-val {{ font-weight: bold; color: #333; font-size: 14px; }}
         .status-badge {{

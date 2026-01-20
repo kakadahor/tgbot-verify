@@ -167,16 +167,20 @@ def generate_html(first_name, last_name, school_id='2565'):
             font-weight: bold;
         }}
 
-        /* 学生信息卡片 */
+        /* 学生信息卡片 (WeasyPrint compatibility) */
         .student-card {{
             background: #fcfcfc;
             border: 1px solid #e0e0e0;
             padding: 15px;
             margin-bottom: 25px;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            display: flex;
+            flex-wrap: wrap;
             gap: 20px;
             font-size: 13px;
+        }}
+        .student-card > div {{
+            flex: 1;
+            min-width: 150px;
         }}
         .info-label {{ color: #777; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }}
         .info-val {{ font-weight: bold; color: #333; font-size: 14px; }}
