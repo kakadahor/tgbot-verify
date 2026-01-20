@@ -72,10 +72,10 @@ def generate_teacher_png(first_name: str, last_name: str) -> bytes:
             ]
         )
         page = browser.new_page(viewport={"width": 1200, "height": 1000})
-        page.set_content(html, wait_until="domcontentloaded")
+        page.set_content(html, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(500)  # Let styles stabilize
         card = page.locator(".browser-mockup")
-        png_bytes = card.screenshot(type="png")
+        png_bytes = card.screenshot(type="png", timeout=60000)
         browser.close()
 
     return png_bytes

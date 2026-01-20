@@ -58,7 +58,7 @@ def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> by
 
         try:
             # Set HTML content directly, use domcontentloaded instead of networkidle (faster)
-            page.set_content(html_content, wait_until='domcontentloaded')
+            page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
 
             # Wait for images to load (if there are external images)
             page.wait_for_load_state('load', timeout=3000)
@@ -72,7 +72,7 @@ def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> by
             page.set_viewport_size({'width': width, 'height': height})
 
             # Take screenshot
-            screenshot_bytes = page.screenshot(type='png', full_page=True)
+            screenshot_bytes = page.screenshot(type='png', full_page=True, timeout=60000)
             return screenshot_bytes
         finally:
             page.close()
@@ -546,7 +546,7 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
             page = await context.new_page()
 
             try:
-                await page.set_content(html_content, wait_until='domcontentloaded')
+                await page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
                 await page.wait_for_load_state('load', timeout=3000)
 
                 if height is None:
@@ -555,7 +555,7 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
                     )
                     await page.set_viewport_size({'width': width, 'height': height})
 
-                screenshot_bytes = await page.screenshot(type='png', full_page=True)
+                screenshot_bytes = await page.screenshot(type='png', full_page=True, timeout=60000)
                 return screenshot_bytes
             finally:
                 await browser.close()
