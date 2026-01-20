@@ -395,9 +395,9 @@ def generate_image(first_name, last_name, school_id='2565'):
                 ]
             )
             page = browser.new_page(viewport={'width': 1200, 'height': 900})
-            page.set_content(html_content, wait_until='domcontentloaded')
+            page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
             page.wait_for_timeout(500)  # Wait for styles to load
-            screenshot_bytes = page.screenshot(type='png', full_page=True)
+            screenshot_bytes = page.screenshot(type='png', full_page=True, timeout=60000)
             browser.close()
 
         return screenshot_bytes
