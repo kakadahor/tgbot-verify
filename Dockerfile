@@ -30,6 +30,12 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# 2. System dependencies (including dumb-init)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    dumb-init \
+    && rm -rf /var/lib/apt/lists/*
+
 # Upgrade pip and build tools
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
@@ -55,5 +61,6 @@ COPY . .
 RUN useradd -m botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Command to run the bot with unbuffered output
-CMD ["python", "-u", "bot.py"]
+# Start the bot using dumb-init
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["python", "bot.py"]
