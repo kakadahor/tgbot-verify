@@ -26,10 +26,11 @@ def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> by
     try:
         from weasyprint import HTML
         # WeasyPrint handles dynamic height automatically
-        # resolution=150 gives approximately 2x scaling (assuming default 96dpi)
-        return HTML(string=html_content).write_png(resolution=150)
-
-    except Exception as e:
+        for html_content, width, height in html_list:
+        # resolution=150 mimics high-DPI scaling
+        results.append(HTML(string=html_content).render().write_png(resolution=150))
+    return results
+ Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 
 

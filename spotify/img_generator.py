@@ -363,7 +363,7 @@ def generate_image(first_name, last_name, school_id='2565'):
         html_content = generate_html(first_name, last_name, school_id)
         
         # Render HTML to PNG using WeasyPrint
-        png_bytes = HTML(string=html_content).write_png(resolution=150)
+        png_bytes = HTML(string=html_content).render().write_png(resolution=150)
         return png_bytes
 
     except ImportError:

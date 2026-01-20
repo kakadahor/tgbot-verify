@@ -53,8 +53,9 @@ def generate_teacher_png(first_name: str, last_name: str) -> bytes:
     try:
         from weasyprint import HTML
         html = _render_template(first_name, last_name)
-        # Scale 2x for quality (resolution=150)
-        return HTML(string=html).write_png(resolution=150)
+        # Render to PNG (Scale 2x for quality using resolution=150)
+        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
+        return HTML(string=html).render().write_png(resolution=150)
     except ImportError:
         raise Exception("weasyprint required: pip install weasyprint")
     except Exception as e:

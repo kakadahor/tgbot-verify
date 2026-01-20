@@ -386,8 +386,8 @@ def generate_image(first_name, last_name, school_id='2565'):
         html_content = generate_html(first_name, last_name, school_id)
         
         # Render HTML to PNG using WeasyPrint (No browser needed)
-        # We specify a resolution of 150 to ensure good quality
-        png_bytes = HTML(string=html_content).write_png(resolution=150)
+        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
+        png_bytes = HTML(string=html_content).render().write_png(resolution=150)
         return png_bytes
 
     except ImportError:
