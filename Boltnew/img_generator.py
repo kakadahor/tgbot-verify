@@ -33,6 +33,7 @@ def _get_browser_context():
             browser = playwright.chromium.launch(
                 headless=False,  # Set to False to allow manual flag
                 timeout=90000,
+                channel='chrome',
                 args=[
                     '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',
@@ -531,6 +532,7 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
             browser = await p.chromium.launch(
                 headless=False,  # Set to False to allow manual flag
                 timeout=90000,
+                channel='chrome',
                 args=[
                     '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',

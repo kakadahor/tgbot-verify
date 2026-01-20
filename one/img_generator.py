@@ -386,6 +386,7 @@ def generate_image(first_name, last_name, school_id='2565'):
             browser = p.chromium.launch(
                 headless=False,  # Set to False to allow manual flag
                 timeout=90000,
+                channel='chrome',
                 args=[
                     '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',
