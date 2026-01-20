@@ -46,6 +46,7 @@ RUN pip install --verbose --no-cache-dir google-cloud-firestore psutil
 # 3. Playwright (already in image, but ensuring requirements met)
 COPY requirements.txt .
 RUN pip install --verbose --no-cache-dir -r requirements.txt
+RUN playwright install-deps chromium
 
 # Copy the rest of the application
 COPY . .

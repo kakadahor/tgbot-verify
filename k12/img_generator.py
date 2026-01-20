@@ -68,8 +68,6 @@ def generate_teacher_png(first_name: str, last_name: str) -> bytes:
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--no-zygote',
-                '--disable-extensions',
             ]
         )
         page = browser.new_page(viewport={"width": 1200, "height": 1000})

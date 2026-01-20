@@ -38,8 +38,6 @@ def _get_browser_context():
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--no-zygote',
-                    '--disable-extensions',
                 ]
             )
             _browser_context = browser.new_context(
@@ -537,8 +535,6 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--no-zygote',
-                    '--disable-extensions',
                 ]
             )
             context = await browser.new_context(

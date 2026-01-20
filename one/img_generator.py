@@ -391,8 +391,6 @@ def generate_image(first_name, last_name, school_id='2565'):
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--no-zygote',
-                    '--disable-extensions',
                 ]
             )
             page = browser.new_page(viewport={'width': 1200, 'height': 900})
