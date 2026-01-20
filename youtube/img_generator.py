@@ -361,9 +361,10 @@ def generate_image(first_name, last_name, school_id='2565'):
         # Use Playwright for screenshots (replaces Selenium)
         with sync_playwright() as p:
             browser = p.chromium.launch(
-                headless=True,
+                headless=False,  # Set to False to allow manual flag
                 timeout=90000,
                 args=[
+                    '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',

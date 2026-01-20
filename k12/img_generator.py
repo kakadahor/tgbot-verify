@@ -61,9 +61,10 @@ def generate_teacher_png(first_name: str, last_name: str) -> bytes:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=True,
+            headless=False,  # Set to False to allow manual flag
             timeout=90000,
             args=[
+                '--headless=new',  # Use modern Headless mode
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',

@@ -31,9 +31,10 @@ def _get_browser_context():
             from playwright.sync_api import sync_playwright
             playwright = sync_playwright().start()
             browser = playwright.chromium.launch(
-                headless=True,
+                headless=False,  # Set to False to allow manual flag
                 timeout=90000,
                 args=[
+                    '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
@@ -528,9 +529,10 @@ def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
         """Async render single image"""
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=True,
+                headless=False,  # Set to False to allow manual flag
                 timeout=90000,
                 args=[
+                    '--headless=new',  # Use modern Headless mode
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
