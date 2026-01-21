@@ -22,15 +22,12 @@ def generate_psu_email(first_name, last_name):
 
 
 def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> bytes:
-    """Convert HTML to PNG screenshot using WeasyPrint (No browser needed)"""
+    """Convert HTML to PNG screenshot using WeasyPrint"""
     try:
         from weasyprint import HTML
-        # WeasyPrint handles dynamic height automatically
-        for html_content, width, height in html_list:
-        # resolution=150 mimics high-DPI scaling
-        results.append(HTML(string=html_content).render().write_png(resolution=150))
-    return results
- Exception as e:
+        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
+        return HTML(string=html_content).render().write_png(resolution=150)
+    except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 
 
@@ -467,59 +464,14 @@ def generate_employment_letter_html(
 
 def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
     """
-    批量并发生成多张 PNG（性能优化版）
-
-    Args:
-        html_list: [(html_content, width, height), ...]
-
-    Returns:
-        list[bytes]: PNG 数据列表
+    Generate multiple PNGs using WeasyPrint
     """
-    import asyncio
-    from playwright.async_api import async_playwright
-
-    async def render_single(html_content: str, width: int, height: int):
-        """Async render single image"""
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=False,  # Set to False to allow manual flag
-                timeout=90000,
-                channel='chrome',
-                args=[
-                    '--headless=new',  # Use modern Headless mode
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                ]
-            )
-            context = await browser.new_context(
-                viewport={'width': width, 'height': height},
-                device_scale_factor=2,
-            )
-            page = await context.new_page()
-
-            try:
-                await page.set_content(html_content, wait_until='domcontentloaded', timeout=60000)
-                await page.wait_for_load_state('load', timeout=3000)
-
-                if height is None:
-                    height = await page.evaluate(
-                        "Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
-                    )
-                    await page.set_viewport_size({'width': width, 'height': height})
-
-                screenshot_bytes = await page.screenshot(type='png', full_page=True, timeout=60000)
-                return screenshot_bytes
-            finally:
-                await browser.close()
-
-    async def render_all():
-        """Concurrently render all images"""
-        tasks = [render_single(html, w, h) for html, w, h in html_list]
-        return await asyncio.gather(*tasks)
-
-    return asyncio.run(render_all())
+    from weasyprint import HTML
+    results = []
+    for html_content, width, height in html_list:
+        # resolution=150 mimics high-DPI scaling
+        results.append(HTML(string=html_content).render().write_png(resolution=150))
+    return results
 
 
 def generate_images(first_name: str, last_name: str, school_id: str = '2565'):
