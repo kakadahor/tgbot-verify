@@ -43,8 +43,26 @@ class SheerIDVerifier:
             verification_id: SheerID Verification ID
         """
         self.verification_id = verification_id
-        self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        self.http_client = httpx.Client(
+            timeout=30.0,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Origin": "https://my.sheerid.com",
+                "Referer": f"https://my.sheerid.com/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
+                "X-SheerID-Device-Fingerprint": self.device_fingerprint,
+                "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"macOS"',
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "Connection": "keep-alive",
+            }
+        )
 
     def __del__(self):
         """Clean up HTTP client"""
@@ -52,10 +70,11 @@ class SheerIDVerifier:
             self.http_client.close()
 
     @staticmethod
-    def _generate_device_fingerprint() -> str:
-        """Generate device fingerprint"""
+    def _generate_device_fingerprint(seed: str) -> str:
+        """Generate a random 32-character hex fingerprint seeded for consistency"""
+        rng = random.Random(seed)
         chars = '0123456789abcdef'
-        return ''.join(random.choice(chars) for _ in range(32))
+        return ''.join(rng.choice(chars) for _ in range(32))
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -127,8 +146,9 @@ class SheerIDVerifier:
             current_step = 'initial'
 
             # Generate teacher info
+            # Generate teacher info with seeded randomness for consistency
             if not first_name or not last_name:
-                name = NameGenerator.generate()
+                name = NameGenerator.generate(seed=self.verification_id)
                 first_name = name['first_name']
                 last_name = name['last_name']
 
@@ -136,11 +156,12 @@ class SheerIDVerifier:
             school = SCHOOLS[school_id]
 
             if not email:
-                email = generate_email()
+                email = generate_email(seed=self.verification_id)
 
             if not birth_date:
-                birth_date = generate_birth_date()
+                birth_date = generate_birth_date(seed=self.verification_id)
 
+            self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
             logger.info(f"Teacher Information: {first_name} {last_name}")
             logger.info(f"Email: {email}")
             logger.info(f"School: {school['name']}")
@@ -156,7 +177,9 @@ class SheerIDVerifier:
             logger.info(f"✓ PDF Size: {pdf_size / 1024:.2f}KB, PNG Size: {png_size / 1024:.2f}KB")
 
             # Step 2: Submit teacher info
-            logger.info("Step 2/4: Submitting teacher info...")
+            import time
+            logger.info("Step 2/4: Submitting teacher info (human delay)...")
+            time.sleep(random.uniform(4.0, 8.8))
             step2_body = {
                 'firstName': first_name,
                 'lastName': last_name,
@@ -172,7 +195,7 @@ class SheerIDVerifier:
                 'locale': 'en-US',
                 'metadata': {
                     'marketConsentValue': False,
-                    'refererUrl': f"{SHEERID_BASE_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
+                    'refererUrl': f"{MY_SHEERID_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
                     'verificationId': self.verification_id,
                     'submissionOptIn': 'By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount'
                 }

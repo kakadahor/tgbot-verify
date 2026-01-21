@@ -49,15 +49,28 @@ def generate_teacher_pdf(first_name: str, last_name: str) -> bytes:
 
 
 def generate_teacher_png(first_name: str, last_name: str) -> bytes:
-    """Use WeasyPrint to generate PNG screenshot."""
+    """Use xhtml2pdf + fitz to generate PNG screenshot."""
     try:
-        from weasyprint import HTML
+        import io
+        import fitz
+        from xhtml2pdf import pisa
+        
+        # 1. Generate HTML
         html = _render_template(first_name, last_name)
-        # Render to PNG (Scale 2x for quality using resolution=150)
-        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
-        return HTML(string=html).render().write_png(resolution=150)
+        
+        # 2. Render HTML to PDF in memory
+        pdf_buffer = io.BytesIO()
+        pisa.CreatePDF(html, dest=pdf_buffer)
+        pdf_data = pdf_buffer.getvalue()
+        
+        # 3. Convert PDF to PNG using fitz
+        doc = fitz.open(stream=pdf_data, filetype='pdf')
+        page = doc.load_page(0)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        return pix.tobytes('png')
+        
     except ImportError:
-        raise Exception("weasyprint required: pip install weasyprint")
+        raise Exception("xhtml2pdf and pymupdf required: pip install xhtml2pdf pymupdf")
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 

@@ -6,8 +6,8 @@ import httpx
 from typing import Dict, Optional, Tuple
 
 from . import config
-from .name_generator import NameGenerator, generate_birth_date
-from .img_generator import generate_images, generate_psu_email
+from .name_generator import NameGenerator, generate_email, generate_birth_date
+from .img_generator import generate_images
 
 # 配置日志
 logging.basicConfig(
@@ -25,17 +25,37 @@ class SheerIDVerifier:
         self.install_page_url = self.normalize_url(install_page_url)
         self.verification_id = verification_id
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
-        self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        self.device_fingerprint = self._generate_device_fingerprint(verification_id or self.external_user_id or "default")
+        self.http_client = httpx.Client(
+            timeout=30.0,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Origin": "https://my.sheerid.com",
+                "Referer": f"https://my.sheerid.com/verify/{config.PROGRAM_ID}/",
+                "X-SheerID-Device-Fingerprint": self.device_fingerprint,
+                "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"macOS"',
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "Connection": "keep-alive",
+            }
+        )
 
     def __del__(self):
         if hasattr(self, "http_client"):
             self.http_client.close()
 
     @staticmethod
-    def _generate_device_fingerprint() -> str:
+    def _generate_device_fingerprint(seed: str) -> str:
+        """Generate a seeded 32-character hex fingerprint"""
+        rng = random.Random(seed)
         chars = "0123456789abcdef"
-        return "".join(random.choice(chars) for _ in range(32))
+        return "".join(rng.choice(chars) for _ in range(32))
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -63,7 +83,7 @@ class SheerIDVerifier:
             "installPageUrl": self.install_page_url,
         }
         data, status = self._sheerid_request(
-            "POST", f"{config.MY_SHEERID_URL}/rest/v2/verification/", body
+            "POST", f"{config.SHEERID_BASE_URL}/rest/v2/verification/", body
         )
         if status != 200 or not isinstance(data, dict) or not data.get("verificationId"):
             raise Exception(f"创建 verification 失败 (状态码 {status}): {data}")
@@ -101,6 +121,19 @@ class SheerIDVerifier:
             logger.error(f"S3 上传失败: {e}")
             return False
 
+    @staticmethod
+    def _generate_device_fingerprint(seed: str) -> str:
+        """Generate a random 32-character hex fingerprint seeded for consistency"""
+        rng = random.Random(seed)
+        chars = '0123456789abcdef'
+        return ''.join(rng.choice(chars) for _ in range(32))
+
+    @staticmethod
+    def _generate_external_user_id(seed: str) -> str:
+        """Generate a realistic external user ID seeded for consistency"""
+        rng = random.Random(seed)
+        return f"{rng.randint(100000, 999999)}-{rng.randint(100000, 999999)}"
+
     def verify(
         self,
         first_name: str = None,
@@ -113,8 +146,9 @@ class SheerIDVerifier:
         try:
             current_step = "initial"
 
+            # Generate teacher info with seeded randomness for consistency
             if not first_name or not last_name:
-                name = NameGenerator.generate()
+                name = NameGenerator.generate(seed=self.verification_id or self.external_user_id)
                 first_name = name["first_name"]
                 last_name = name["last_name"]
 
@@ -122,11 +156,12 @@ class SheerIDVerifier:
             school = config.SCHOOLS[school_id]
 
             if not email:
-                email = generate_psu_email(first_name, last_name)
+                email = generate_email(first_name, last_name, seed=self.verification_id or self.external_user_id)
             if not birth_date:
-                birth_date = generate_birth_date()
+                birth_date = generate_birth_date(seed=self.verification_id or self.external_user_id)
             if not self.external_user_id:
-                self.external_user_id = str(random.randint(1000000, 9999999))
+                self.external_user_id = self._generate_external_user_id(self.verification_id or "default")
+            self.device_fingerprint = self._generate_device_fingerprint(self.verification_id or self.external_user_id)
 
             if not self.verification_id:
                 logger.info("申请新的 verificationId ...")
@@ -147,11 +182,13 @@ class SheerIDVerifier:
                 )
 
             # 提交教师信息
-            logger.info("步骤 2/5: 提交教师信息...")
+            import time
+            logger.info("步骤 2/5: 提交教师信息 (human delay)...")
+            time.sleep(random.uniform(4.5, 9.2))
             step2_body = {
                 "firstName": first_name,
                 "lastName": last_name,
-                "birthDate": "",
+                "birthDate": birth_date,
                 "email": email,
                 "phoneNumber": "",
                 "organization": {
@@ -166,7 +203,6 @@ class SheerIDVerifier:
                     "marketConsentValue": True,
                     "refererUrl": self.install_page_url,
                     "externalUserId": self.external_user_id,
-                    "flags": '{"doc-upload-considerations":"default","doc-upload-may24":"default","doc-upload-redesign-use-legacy-message-keys":false,"docUpload-assertion-checklist":"default","include-cvec-field-france-student":"not-labeled-optional","org-search-overlay":"default","org-selected-display":"default"}',
                     "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
                 },
             }

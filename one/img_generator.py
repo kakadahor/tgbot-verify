@@ -58,19 +58,12 @@ def generate_html(first_name, last_name, school_id='2565'):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LionPATH - Student Home</title>
     <style>
-        :root {{
-            --psu-blue: #1E407C; /* Penn State Nittany Navy */
-            --psu-light-blue: #96BEE6;
-            --bg-gray: #f4f4f4;
-            --text-color: #333;
-        }}
-
         body {{
             font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
             background-color: #e0e0e0; /* 浏览器背景 */
             margin: 0;
             padding: 20px;
-            color: var(--text-color);
+            color: #333;
             display: flex;
             justify-content: center;
         }}
@@ -88,7 +81,7 @@ def generate_html(first_name, last_name, school_id='2565'):
 
         /* 顶部导航栏 LionPATH */
         .header {{
-            background-color: var(--psu-blue);
+            background-color: #1E407C;
             color: white;
             padding: 0 20px;
             height: 60px;
@@ -135,7 +128,7 @@ def generate_html(first_name, last_name, school_id='2565'):
             gap: 20px;
         }}
         .nav-item {{ cursor: pointer; }}
-        .nav-item.active {{ color: var(--psu-blue); font-weight: bold; border-bottom: 2px solid var(--psu-blue); padding-bottom: 8px; }}
+        .nav-item.active {{ color: #1E407C; font-weight: bold; border-bottom: 2px solid #1E407C; padding-bottom: 8px; }}
 
         /* 主内容区 */
         .content {{
@@ -154,7 +147,7 @@ def generate_html(first_name, last_name, school_id='2565'):
 
         .page-title {{
             font-size: 24px;
-            color: var(--psu-blue);
+            color: #1E407C;
             margin: 0;
         }}
 
@@ -210,7 +203,7 @@ def generate_html(first_name, last_name, school_id='2565'):
             border-bottom: 1px solid #eee;
         }}
 
-        .course-code {{ font-weight: bold; color: var(--psu-blue); }}
+        .course-code {{ font-weight: bold; color: #1E407C; }}
         .course-title {{ font-weight: 500; }}
 
         /* 打印适配 */
@@ -369,29 +362,32 @@ def generate_html(first_name, last_name, school_id='2565'):
 
 def generate_image(first_name, last_name, school_id='2565'):
     """
-    Generate Penn State LionPATH screenshot PNG
-
-    Args:
-        first_name: First name
-        last_name: Last name
-        school_id: School ID
-
-    Returns:
-        bytes: PNG image data
+    Generate Penn State LionPATH screenshot PNG using xhtml2pdf + fitz
     """
     try:
-        from weasyprint import HTML
+        import io
+        from xhtml2pdf import pisa
+        import fitz
         
-        # Generate HTML
+        # 1. Generate HTML
         html_content = generate_html(first_name, last_name, school_id)
         
-        # Render HTML to PNG using WeasyPrint (No browser needed)
-        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
-        png_bytes = HTML(string=html_content).render().write_png(resolution=150)
+        # 2. Render HTML to PDF in memory
+        pdf_buffer = io.BytesIO()
+        pisa.CreatePDF(html_content, dest=pdf_buffer)
+        pdf_data = pdf_buffer.getvalue()
+        
+        # 3. Convert PDF to PNG using fitz (PyMuPDF)
+        doc = fitz.open(stream=pdf_data, filetype='pdf')
+        page = doc.load_page(0)  # Get first page
+        # Matrix(2, 2) provides 2x scaling (144 DPI) for better quality
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        png_bytes = pix.tobytes('png')
+        
         return png_bytes
 
     except ImportError:
-        raise Exception("weasyprint required: pip install weasyprint")
+        raise Exception("xhtml2pdf and pymupdf required: pip install xhtml2pdf pymupdf")
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 

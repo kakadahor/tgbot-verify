@@ -22,11 +22,20 @@ def generate_psu_email(first_name, last_name):
 
 
 def _html_to_png(html_content: str, width: int = 1200, height: int = None) -> bytes:
-    """Convert HTML to PNG screenshot using WeasyPrint"""
+    """Convert HTML to PNG screenshot using xhtml2pdf + fitz"""
     try:
-        from weasyprint import HTML
-        # In WeasyPrint 60+, write_png moved to the Document object returned by render()
-        return HTML(string=html_content).render().write_png(resolution=150)
+        import io
+        import fitz
+        from xhtml2pdf import pisa
+        
+        pdf_buffer = io.BytesIO()
+        pisa.CreatePDF(html_content, dest=pdf_buffer)
+        pdf_data = pdf_buffer.getvalue()
+        
+        doc = fitz.open(stream=pdf_data, filetype='pdf')
+        page = doc.load_page(0)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        return pix.tobytes('png')
     except Exception as e:
         raise Exception(f"Image generation failed: {str(e)}")
 
@@ -42,12 +51,6 @@ def generate_teacher_card_html(first_name: str, last_name: str, psu_id: str) -> 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PSU Faculty id+ Card</title>
     <style>
-        :root {{
-            --psu-blue: #1E407C;
-            --psu-light-blue: #96BEE6;
-            --text-dark: #333;
-        }}
-
         body {{
             background-color: #e0e0e0;
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -91,7 +94,7 @@ def generate_teacher_card_html(first_name: str, last_name: str, psu_id: str) -> 
         .lion-shield {{
             width: 45px;
             height: 50px;
-            background: var(--psu-blue);
+            background: #1E407C;
             clip-path: polygon(0 0, 100% 0, 100% 75%, 50% 100%, 0 75%);
             display: flex;
             justify-content: center;
@@ -114,14 +117,14 @@ def generate_teacher_card_html(first_name: str, last_name: str, psu_id: str) -> 
         .psu-text span:first-child {{
             font-size: 20px;
             font-weight: 900;
-            color: var(--psu-blue);
+            color: #1E407C;
             text-transform: uppercase;
             line-height: 1;
         }}
         .psu-text span:last-child {{
             font-size: 20px;
             font-weight: 900;
-            color: var(--psu-blue);
+            color: #1E407C;
             text-transform: uppercase;
             line-height: 1;
         }}
@@ -130,7 +133,7 @@ def generate_teacher_card_html(first_name: str, last_name: str, psu_id: str) -> 
             width: 180px;
             height: 230px;
             background: #ddd;
-            border: 2px solid var(--psu-blue);
+            border: 2px solid #1E407C;
             margin-top: 10px;
             overflow: hidden;
         }}
@@ -166,7 +169,7 @@ def generate_teacher_card_html(first_name: str, last_name: str, psu_id: str) -> 
         .footer-bar {{
             width: 100%;
             height: 50px;
-            background-color: var(--psu-blue);
+            background-color: #1E407C;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -464,13 +467,22 @@ def generate_employment_letter_html(
 
 def _html_to_png_batch(html_list: list[tuple[str, int, int]]) -> list[bytes]:
     """
-    Generate multiple PNGs using WeasyPrint
+    Generate multiple PNGs using xhtml2pdf + fitz
     """
-    from weasyprint import HTML
+    import io
+    import fitz
+    from xhtml2pdf import pisa
+    
     results = []
     for html_content, width, height in html_list:
-        # resolution=150 mimics high-DPI scaling
-        results.append(HTML(string=html_content).render().write_png(resolution=150))
+        pdf_buffer = io.BytesIO()
+        pisa.CreatePDF(html_content, dest=pdf_buffer)
+        pdf_data = pdf_buffer.getvalue()
+        
+        doc = fitz.open(stream=pdf_data, filetype='pdf')
+        page = doc.load_page(0)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        results.append(pix.tobytes('png'))
     return results
 
 

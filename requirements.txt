@@ -2,11 +2,10 @@ python-telegram-bot[webhooks]>=20.0
 httpx>=0.27.0
 Pillow>=10.0.0
 reportlab>=4.0.0
-xhtml2pdf>=0.2.15
-playwright==1.48.0
+xhtml2pdf>=0.2.17
+pymupdf>=1.26.7
 pymysql>=1.1.0
 psutil>=5.9.0
 python-dotenv>=1.0.0
 google-cloud-firestore>=2.14.0
 easyocr>=1.7.0
-weasyprint[png]>=62.0

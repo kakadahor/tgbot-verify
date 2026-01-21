@@ -1,115 +1,83 @@
-"""随机名字生成器"""
+import re
 import random
+from typing import Optional
 
 
 class NameGenerator:
-    """英文名字生成器"""
+    """Realistic Name Generator with seeding support"""
     
-    ROOTS = {
-        'prefixes': ['Al', 'Bri', 'Car', 'Dan', 'El', 'Fer', 'Gar', 'Har', 'Jes', 'Kar', 
-                    'Lar', 'Mar', 'Nor', 'Par', 'Quin', 'Ros', 'Sar', 'Tar', 'Val', 'Wil'],
-        'middles': ['an', 'en', 'in', 'on', 'ar', 'er', 'or', 'ur', 'al', 'el', 
-                   'il', 'ol', 'am', 'em', 'im', 'om', 'ay', 'ey', 'oy', 'ian'],
-        'suffixes': ['ton', 'son', 'man', 'ley', 'field', 'ford', 'wood', 'stone', 'worth', 'berg',
-                    'stein', 'bach', 'heim', 'gard', 'land', 'wick', 'shire', 'dale', 'brook', 'ridge'],
-        'name_roots': ['Alex', 'Bern', 'Crist', 'Dav', 'Edw', 'Fred', 'Greg', 'Henr', 'Ivan', 'John',
-                      'Ken', 'Leon', 'Mich', 'Nick', 'Oliv', 'Paul', 'Rich', 'Step', 'Thom', 'Will'],
-        'name_endings': ['a', 'e', 'i', 'o', 'y', 'ie', 'ey', 'an', 'en', 'in', 
-                        'on', 'er', 'ar', 'or', 'el', 'al', 'iel', 'ael', 'ine', 'lyn']
-    }
+    FIRST_NAMES = [
+        'James', 'Mary', 'Robert', 'Patricia', 'John', 'Jennifer', 'Michael', 'Linda',
+        'David', 'Elizabeth', 'William', 'Barbara', 'Richard', 'Susan', 'Joseph', 'Jessica',
+        'Thomas', 'Sarah', 'Christopher', 'Karen', 'Charles', 'Lisa', 'Daniel', 'Nancy',
+        'Matthew', 'Sandra', 'Anthony', 'Betty', 'Mark', 'Ashley', 'Donald', 'Emily',
+        'Steven', 'Kimberly', 'Andrew', 'Margaret', 'Paul', 'Donna', 'Joshua', 'Michelle',
+        'Kenneth', 'Carol', 'Kevin', 'Amanda', 'Brian', 'Dorothy', 'George', 'Melissa',
+        'Timothy', 'Deborah', 'Ronald', 'Stephanie', 'Edward', 'Rebecca', 'Jason', 'Sharon',
+        'Jeffrey', 'Laura', 'Ryan', 'Cynthia', 'Jacob', 'Kathleen', 'Gary', 'Amy',
+        'Nicholas', 'Angela', 'Eric', 'Shirley', 'Jonathan', 'Anna', 'Stephen', 'Brenda',
+        'Larry', 'Pamela', 'Justin', 'Emma', 'Scott', 'Nicole', 'Brandon', 'Helen',
+        'Benjamin', 'Samantha', 'Samuel', 'Katherine', 'Gregory', 'Christine', 'Alexander', 'Debra',
+        'Frank', 'Rachel', 'Patrick', 'Carolyn', 'Raymond', 'Janet', 'Jack', 'Catherine',
+        'Dennis', 'Maria', 'Jerry', 'Heather', 'Tyler', 'Diane', 'Aaron', 'Ruth',
+        'Jose', 'Julie', 'Adam', 'Olive', 'Nathan', 'Virginia', 'Henry', 'Kathleen',
+        'Douglas', 'Andrea', 'Zachary', 'Hannah', 'Peter', 'Joe', 'Kyle', 'Jordan',
+        'Lauren', 'Evelyn', 'Christian', 'Abigail', 'Megan', 'Alice', 'Ethan', 'Julia'
+    ]
     
-    PATTERNS = {
-        'first_name': [
-            ['prefix', 'ending'],
-            ['name_root', 'ending'],
-            ['prefix', 'middle', 'ending'],
-            ['name_root', 'middle', 'ending']
-        ],
-        'last_name': [
-            ['prefix', 'suffix'],
-            ['name_root', 'suffix'],
-            ['prefix', 'middle', 'suffix'],
-            ['compound']
-        ]
-    }
-    
+    LAST_NAMES = [
+        'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
+        'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas',
+        'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 'White',
+        'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson', 'Walker', 'Young',
+        'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
+        'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell',
+        'Carter', 'Roberts', 'Gomez', 'Phillips', 'Evans', 'Turner', 'Diaz', 'Parker',
+        'Cruz', 'Edwards', 'Collins', 'Reyes', 'Stewart', 'Morris', 'Morales', 'Murphy',
+        'Cook', 'Rogers', 'Gutierrez', 'Ortiz', 'Morgan', 'Cooper', 'Peterson', 'Bailey',
+        'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
+        'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza',
+        'Ruiz', 'Hughes', 'Price', 'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers',
+        'Long', 'Ross', 'Foster', 'Jimenez', 'Powell', 'Jenkins', 'Perry', 'Russell'
+    ]
+
     @classmethod
-    def _generate_component(cls, pattern):
-        """根据模式生成名字组件"""
-        components = []
-        for part in pattern:
-            if part == 'prefix':
-                component = random.choice(cls.ROOTS['prefixes'])
-            elif part == 'middle':
-                component = random.choice(cls.ROOTS['middles'])
-            elif part == 'suffix':
-                component = random.choice(cls.ROOTS['suffixes'])
-            elif part == 'name_root':
-                component = random.choice(cls.ROOTS['name_roots'])
-            elif part == 'ending':
-                component = random.choice(cls.ROOTS['name_endings'])
-            elif part == 'compound':
-                part1 = random.choice(cls.ROOTS['prefixes'])
-                part2 = random.choice(cls.ROOTS['suffixes'])
-                component = part1 + part2
-            else:
-                component = ''
-            
-            components.append(component)
-        
-        return ''.join(components)
-    
-    @classmethod
-    def _format_name(cls, name):
-        """格式化名字（首字母大写）"""
-        return name.capitalize()
-    
-    @classmethod
-    def generate(cls):
+    def generate(cls, seed: Optional[str] = None):
         """
-        生成随机英文名字
-        
-        Returns:
-            dict: 包含 first_name, last_name, full_name
+        Generate a realistic name, optionally using a seed for consistency.
         """
-        first_name_pattern = random.choice(cls.PATTERNS['first_name'])
-        last_name_pattern = random.choice(cls.PATTERNS['last_name'])
-        
-        first_name = cls._generate_component(first_name_pattern)
-        last_name = cls._generate_component(last_name_pattern)
+        rng = random.Random(seed)
+        first_name = rng.choice(cls.FIRST_NAMES)
+        last_name = rng.choice(cls.LAST_NAMES)
         
         return {
-            'first_name': cls._format_name(first_name),
-            'last_name': cls._format_name(last_name),
-            'full_name': f"{cls._format_name(first_name)} {cls._format_name(last_name)}"
+            'first_name': first_name,
+            'last_name': last_name,
+            'full_name': f"{first_name} {last_name}"
         }
 
 
-def generate_email():
+def generate_email(seed: Optional[str] = None):
     """
-    生成随机邮箱（教师使用常见邮箱）
-
-    Returns:
-        str: 邮箱地址
+    Generate a realistic teacher email with optional seed.
     """
-    name = NameGenerator.generate()
+    rng = random.Random(seed)
+    name = NameGenerator.generate(seed=seed)
     first_name = name['first_name'].lower()
     last_name = name['last_name'].lower()
-    random_num = random.randint(1000, 9999)
+    random_num = rng.randint(1000, 9999)
     domains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com']
-    domain = random.choice(domains)
+    domain = rng.choice(domains)
     return f"{first_name}.{last_name}{random_num}@{domain}"
 
 
-def generate_birth_date():
+def generate_birth_date(seed: Optional[str] = None):
     """
-    生成随机生日（教师年龄范围 1970-1990）
-
-    Returns:
-        str: YYYY-MM-DD 格式的日期
+    Generate a realistic teacher birth date (1970-1990) with optional seed.
     """
-    year = random.randint(1970, 1990)
-    month = str(random.randint(1, 12)).zfill(2)
-    day = str(random.randint(1, 28)).zfill(2)
+    rng = random.Random(seed)
+    year = rng.randint(1970, 1990)
+    month = str(rng.randint(1, 12)).zfill(2)
+    day = str(rng.randint(1, 28)).zfill(2)
     return f"{year}-{month}-{day}"
 

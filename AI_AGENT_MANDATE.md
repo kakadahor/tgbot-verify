@@ -42,7 +42,7 @@ git checkout main
 - Builds Docker image and deploys to Cloud Run
 - Region: `asia-southeast1`
 - Service: `tgbot-verify`
-- Resources: 4Gi Memory, 2 CPU (Required for Chromium)
+- Resources: 4Gi Memory, 2 CPU (Browserless architecture)
 
 ### Required GitHub Secrets
 
@@ -78,22 +78,9 @@ The bot has two modes based on environment detection:
 2. Set as `WEBHOOK_URL` secret in GitHub
 3. Redeploy
 
-#### Issue: Playwright Timeout Errors
-**Cause**: Missing container-safe browser launch arguments
-**Solution**: Ensure all `img_generator.py` files have:
-```python
-browser = p.chromium.launch(
-    headless=True,
-    timeout=60000,
-    args=[
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--disable-extensions',
-    ]
-)
-```
+#### Issue: Image Generation Errors
+**Cause**: Missing system libraries (libcairo2, etc.) or font issues.
+**Solution**: Ensure `Dockerfile` installs all required system dependencies for `xhtml2pdf` and `fitz`. Check logs for specific missing libraries.
 
 ### Code Quality Standards
 
@@ -141,7 +128,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo
 
 ### File Structure Reference
 
-**Image Generators** (Playwright-based):
+**Image Generators** (Browserless: xhtml2pdf + fitz):
 - `one/img_generator.py` - Gemini Pro verification
 - `k12/img_generator.py` - ChatGPT Teachers verification
 - `youtube/img_generator.py` - YouTube Premium verification

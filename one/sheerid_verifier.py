@@ -6,8 +6,8 @@ import httpx
 from typing import Dict, Optional, Tuple
 
 from . import config
-from .name_generator import NameGenerator, generate_birth_date
-from .img_generator import generate_image, generate_psu_email
+from .name_generator import NameGenerator, generate_email, generate_birth_date, generate_phone_number
+from .img_generator import generate_image
 
 # Configure logging
 logging.basicConfig(
@@ -23,17 +23,37 @@ class SheerIDVerifier:
 
     def __init__(self, verification_id: str):
         self.verification_id = verification_id
-        self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        self.http_client = httpx.Client(
+            timeout=30.0,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Origin": "https://my.sheerid.com",
+                "Referer": f"https://my.sheerid.com/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
+                "X-SheerID-Device-Fingerprint": self.device_fingerprint,
+                "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"macOS"',
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-site",
+                "Connection": "keep-alive",
+            }
+        )
 
     def __del__(self):
         if hasattr(self, "http_client"):
             self.http_client.close()
 
     @staticmethod
-    def _generate_device_fingerprint() -> str:
+    def _generate_device_fingerprint(seed: str) -> str:
+        """Generate a random 32-character hex fingerprint seeded for consistency"""
+        rng = random.Random(seed)
         chars = '0123456789abcdef'
-        return ''.join(random.choice(chars) for _ in range(32))
+        return ''.join(rng.choice(chars) for _ in range(32))
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -92,8 +112,9 @@ class SheerIDVerifier:
         try:
             current_step = "initial"
 
+            # Generate student info with seeded randomness for consistency
             if not first_name or not last_name:
-                name = NameGenerator.generate()
+                name = NameGenerator.generate(seed=self.verification_id)
                 first_name = name["first_name"]
                 last_name = name["last_name"]
 
@@ -101,9 +122,11 @@ class SheerIDVerifier:
             school = config.SCHOOLS[school_id]
 
             if not email:
-                email = generate_psu_email(first_name, last_name)
+                email = generate_email(first_name, last_name, seed=self.verification_id)
             if not birth_date:
-                birth_date = generate_birth_date()
+                birth_date = generate_birth_date(seed=self.verification_id)
+            
+            phone_number = generate_phone_number(seed=self.verification_id)
 
             logger.info(f"Student Information: {first_name} {last_name}")
             logger.info(f"Email: {email}")
@@ -118,13 +141,15 @@ class SheerIDVerifier:
             logger.info(f"✅ PNG Size: {file_size / 1024:.2f}KB")
 
             # Submit student info
-            logger.info("Step 2/4: Submitting student info...")
+            import time
+            logger.info("Step 2/4: Submitting student info (with human delay)...")
+            time.sleep(random.uniform(3.5, 7.2))  # Mimic human typing speed
             step2_body = {
                 "firstName": first_name,
                 "lastName": last_name,
                 "birthDate": birth_date,
                 "email": email,
-                "phoneNumber": "",
+                "phoneNumber": phone_number,
                 "organization": {
                     "id": int(school_id),
                     "idExtended": school["idExtended"],
@@ -134,9 +159,8 @@ class SheerIDVerifier:
                 "locale": "en-US",
                 "metadata": {
                     "marketConsentValue": False,
-                    "refererUrl": f"{config.SHEERID_BASE_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
+                    "refererUrl": f"{config.MY_SHEERID_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
                     "verificationId": self.verification_id,
-                    "flags": '{"collect-info-step-email-first":"default","doc-upload-considerations":"default","doc-upload-may24":"default","doc-upload-redesign-use-legacy-message-keys":false,"docUpload-assertion-checklist":"default","font-size":"default","include-cvec-field-france-student":"not-labeled-optional"}',
                     "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
                 },
             }
