@@ -241,7 +241,7 @@ def generate_html(first_name, last_name, school_id='2565'):
         <div class="page-header">
             <h1 class="page-title">My Class Schedule</h1>
             <div class="term-selector">
-                Term: <strong>Fall 2025</strong> (Aug 25 - Dec 12)
+                Term: <strong>Spring 2026</strong> (Jan 12 - May 08)
             </div>
         </div>
 

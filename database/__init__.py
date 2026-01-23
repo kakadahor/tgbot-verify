@@ -62,6 +62,11 @@ def get_database(db_type: Optional[str] = None) -> DatabaseInterface:
         from database.firestore import FirestoreDatabase
         _db_instance = FirestoreDatabase()
         print(f"✅ Using Firestore database")
+
+    elif db_type == 'sqlite':
+        from database.sqlite import SQLiteDatabase
+        _db_instance = SQLiteDatabase()
+        print(f"✅ Using SQLite database")
     
     else:
         raise ValueError(f"Unknown database type: {db_type}. Use 'mysql' or 'firestore'")
