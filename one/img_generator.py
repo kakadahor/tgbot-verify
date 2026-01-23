@@ -360,17 +360,175 @@ def generate_html(first_name, last_name, school_id='2565'):
     return html
 
 
-def generate_image(first_name, last_name, school_id='2565'):
+def generate_transcript_html(first_name, last_name, school_name, major):
+    """Generate PSU-style Transcript HTML"""
+    psu_id = generate_psu_id()
+    name = f"{first_name} {last_name}"
+    date = datetime.now().strftime('%B %d, %Y')
+    
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            font-family: 'Times New Roman', serif;
+            color: #333;
+            padding: 40px;
+            background: #fff;
+            max-width: 800px;
+            margin: auto;
+            border: 1px solid #eee;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 2px solid #1E407C;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }}
+        .school-name {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #1E407C;
+        }}
+        .doc-title {{
+            font-size: 18px;
+            margin-top: 5px;
+            letter-spacing: 2px;
+        }}
+        .student-info {{
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }}
+        th {{
+            border-bottom: 1px solid #333;
+            text-align: left;
+            padding: 8px;
+        }}
+        td {{
+            padding: 6px 8px;
+        }}
+        .total-row {{
+            font-weight: bold;
+            border-top: 1px solid #333;
+        }}
+        .footer {{
+            margin-top: 40px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            font-style: italic;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="school-name">{school_name.upper()}</div>
+        <div class="doc-title">OFFICIAL ACADEMIC TRANSCRIPT</div>
+    </div>
+
+    <div class="student-info">
+        <div>
+            <strong>Name:</strong> {name}<br>
+            <strong>Student ID:</strong> {psu_id}<br>
+            <strong>Birth Date:</strong> 2002-02-27
+        </div>
+        <div style="text-align: right;">
+            <strong>Issued:</strong> {date}<br>
+            <strong>Program:</strong> {major}<br>
+            <strong>Status:</strong> Active / Enrolled
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Course</th>
+                <th>Description</th>
+                <th>Units</th>
+                <th>Grade</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>CS 101</td>
+                <td>Introduction to Computer Science</td>
+                <td>3.00</td>
+                <td>A</td>
+            </tr>
+            <tr>
+                <td>CS 201</td>
+                <td>Discrete Mathematics</td>
+                <td>3.00</td>
+                <td>A-</td>
+            </tr>
+            <tr>
+                <td>MATH 230</td>
+                <td>Calculus and Vector Analysis</td>
+                <td>4.00</td>
+                <td>A</td>
+            </tr>
+            <tr>
+                <td>ENGL 202C</td>
+                <td>Technical Writing</td>
+                <td>3.00</td>
+                <td>B+</td>
+            </tr>
+            <tr class="total-row">
+                <td colspan="2">Cumulative GPA: 3.82</td>
+                <td>Total: 13.00</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        This document is an unofficial copy of the academic record. <br>
+        Electronic Authentication Code: {psu_id}-{date.replace(' ', '-')}
+    </div>
+</body>
+</html>
+"""
+    return html
+
+
+def generate_image(first_name, last_name, school_id='2565', doc_type=None):
     """
-    Generate Penn State LionPATH screenshot PNG using xhtml2pdf + fitz
+    Generate student verification image (ID Card or Transcript)
     """
     try:
         import io
         from xhtml2pdf import pisa
         import fitz
         
+        # Randomly choose document type if not specified
+        if not doc_type:
+            doc_type = 'transcript' if random.random() < 0.6 else 'id_card'
+            
+        majors = [
+            'Computer Science (BS)',
+            'Software Engineering (BS)',
+            'Business Administration (BS)',
+            'Data Science (BS)'
+        ]
+        major = random.choice(majors)
+        
+        # Get school info for name
+        from . import config
+        school = config.SCHOOLS.get(school_id, config.SCHOOLS['2565'])
+        
         # 1. Generate HTML
-        html_content = generate_html(first_name, last_name, school_id)
+        if doc_type == 'transcript':
+            html_content = generate_transcript_html(first_name, last_name, school['name'], major)
+        else:
+            html_content = generate_html(first_name, last_name, school_id)
         
         # 2. Render HTML to PDF in memory
         pdf_buffer = io.BytesIO()
@@ -379,8 +537,7 @@ def generate_image(first_name, last_name, school_id='2565'):
         
         # 3. Convert PDF to PNG using fitz (PyMuPDF)
         doc = fitz.open(stream=pdf_data, filetype='pdf')
-        page = doc.load_page(0)  # Get first page
-        # Matrix(2, 2) provides 2x scaling (144 DPI) for better quality
+        page = doc.load_page(0)
         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
         png_bytes = pix.tobytes('png')
         

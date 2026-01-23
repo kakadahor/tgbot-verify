@@ -109,6 +109,16 @@ class SheerIDVerifier:
             data = response.text
         return data, response.status_code
 
+    def get_verification_status(self) -> Dict:
+        """获取当前验证状态"""
+        data, status = self._sheerid_request(
+            "GET", 
+            f"{config.MY_SHEERID_URL}/rest/v2/verification/{self.verification_id}"
+        )
+        if status != 200:
+             raise Exception(f"获取状态失败: {status}")
+        return data
+
     def _upload_to_s3(self, upload_url: str, img_data: bytes) -> bool:
         """上传 PNG 到 S3"""
         try:
@@ -163,9 +173,45 @@ class SheerIDVerifier:
                 self.external_user_id = self._generate_external_user_id(self.verification_id or "default")
             self.device_fingerprint = self._generate_device_fingerprint(self.verification_id or self.external_user_id)
 
+            # Check current status before starting if we have an ID
+            if self.verification_id:
+                try:
+                    status_info = self.get_verification_status()
+                    current_step_status = status_info.get("currentStep")
+                    logger.info(f"Current session status: {current_step_status}")
+                    
+                    if current_step_status == "error":
+                        logger.warning(
+                            f"Verification ID {self.verification_id} is in ERROR state. Creating new session..."
+                        )
+                        self.create_verification()
+                        current_step = "initial"
+                    elif current_step_status == "success":
+                         logger.info("Verification already successful!")
+                         return {
+                            "success": True, 
+                            "message": "Verification already successful",
+                            "verification_id": self.verification_id,
+                            "redirect_url": status_info.get("redirectUrl"),
+                            "reward_code": status_info.get("rewardCode") or status_info.get("rewardData", {}).get("rewardCode"),
+                            "status": status_info
+                         }
+                    else:
+                        current_step = current_step_status
+                        # Update program ID from status if available, to fix create_verification for future
+                        if status_info.get("programId") and status_info.get("programId") != config.PROGRAM_ID:
+                             logger.info(f"Updating PROGRAM_ID from {config.PROGRAM_ID} to {status_info.get('programId')}")
+                             config.PROGRAM_ID = status_info.get("programId")
+
+                except Exception as e:
+                    logger.warning(f"Failed to check status, creating new session: {e}")
+                    self.create_verification()
+                    current_step = "initial"
+
             if not self.verification_id:
                 logger.info("申请新的 verificationId ...")
                 self.create_verification()
+                current_step = "initial"
 
             logger.info(f"教师信息: {first_name} {last_name}")
             logger.info(f"邮箱: {email}")
@@ -181,48 +227,86 @@ class SheerIDVerifier:
                     f"  - {asset['file_name']} 大小: {len(asset['data'])/1024:.2f}KB"
                 )
 
-            # 提交教师信息
-            import time
-            logger.info("步骤 2/5: 提交教师信息 (human delay)...")
-            time.sleep(random.uniform(4.5, 9.2))
-            step2_body = {
-                "firstName": first_name,
-                "lastName": last_name,
-                "birthDate": birth_date,
-                "email": email,
-                "phoneNumber": "",
-                "organization": {
-                    "id": int(school_id),
-                    "idExtended": school["idExtended"],
-                    "name": school["name"],
-                },
-                "deviceFingerprintHash": self.device_fingerprint,
-                "externalUserId": self.external_user_id,
-                "locale": "en-US",
-                "metadata": {
-                    "marketConsentValue": True,
-                    "refererUrl": self.install_page_url,
+            # 提交教师信息 (Only if not past this step)
+            # Steps order: initial -> collectTeacherPersonalInfo -> sso -> docUpload -> success
+            # If current_step is None or 'initial', do this.
+            # If current_step is 'collectTeacherPersonalInfo', do this (sometimes it stays here if partial?)
+            # Actually, if it is 'docUpload', skip this.
+            
+            should_do_step_2 = current_step in ["initial", "collectTeacherPersonalInfo", None]
+            
+            if should_do_step_2:
+                import time
+                logger.info("步骤 2/5: 提交教师信息 (human delay)...")
+                time.sleep(random.uniform(4.5, 9.2))
+                step2_body = {
+                    "firstName": first_name,
+                    "lastName": last_name,
+                    "birthDate": birth_date,
+                    "email": email,
+                    "phoneNumber": "",
+                    "organization": {
+                        "id": int(school_id),
+                        "idExtended": school["idExtended"],
+                        "name": school["name"],
+                    },
+                    "deviceFingerprintHash": self.device_fingerprint,
                     "externalUserId": self.external_user_id,
-                    "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
-                },
-            }
+                    "locale": "en-US",
+                    "metadata": {
+                        "marketConsentValue": True,
+                        "refererUrl": self.install_page_url,
+                        "externalUserId": self.external_user_id,
+                        "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
+                    },
+                }
 
-            step2_data, step2_status = self._sheerid_request(
-                "POST",
-                f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectTeacherPersonalInfo",
-                step2_body,
-            )
+                step2_data, step2_status = self._sheerid_request(
+                    "POST",
+                    f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectTeacherPersonalInfo",
+                    step2_body,
+                )
 
-            if step2_status != 200:
-                raise Exception(f"步骤 2 失败 (状态码 {step2_status}): {step2_data}")
-            if isinstance(step2_data, dict) and step2_data.get("currentStep") == "error":
-                error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
-                raise Exception(f"步骤 2 错误: {error_msg}")
+                if step2_status != 200:
+                    # If we get an invalidStep error, it might be because the session expired or is invalid
+                    # Try one more time with a fresh session
+                    try_recovery = False
+                    if isinstance(step2_data, dict):
+                         error_ids = step2_data.get("errorIds", [])
+                         if "invalidStep" in error_ids or step2_data.get("currentStep") == "error":
+                             try_recovery = True
+                    
+                    if try_recovery:
+                        logger.warning("Session appears invalid/expired. Retrying with a FRESH session...")
+                        self.create_verification()
+                        current_step = "initial"
+                        # Re-seed generator with new ID for consistency in this new attempt
+                        # specific to this retry so we don't change the person's details if possible, 
+                        # but usually it's better to just reuse the generated info with the new ID.
+                        
+                        # Update body with new device fingerprint if it depends on ID (it does in init)
+                        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+                        step2_body["deviceFingerprintHash"] = self.device_fingerprint
+                        
+                        # Retry request
+                        step2_data, step2_status = self._sheerid_request(
+                            "POST",
+                            f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectTeacherPersonalInfo",
+                            step2_body,
+                        )
 
-            logger.info(f"✅ 步骤 2 完成: {getattr(step2_data, 'get', lambda k, d=None: d)('currentStep')}")
-            current_step = (
-                step2_data.get("currentStep", current_step) if isinstance(step2_data, dict) else current_step
-            )
+                if step2_status != 200:
+                    raise Exception(f"步骤 2 失败 (状态码 {step2_status}): {step2_data}")
+                if isinstance(step2_data, dict) and step2_data.get("currentStep") == "error":
+                    error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
+                    raise Exception(f"步骤 2 错误: {error_msg}")
+
+                logger.info(f"✅ 步骤 2 完成: {getattr(step2_data, 'get', lambda k, d=None: d)('currentStep')}")
+                current_step = (
+                    step2_data.get("currentStep", current_step) if isinstance(step2_data, dict) else current_step
+                )
+            else:
+                logger.info(f"跳过步骤 2 (当前状态: {current_step})")
 
             # 跳过 SSO（如需要）
             if current_step in ["sso", "collectTeacherPersonalInfo"]:

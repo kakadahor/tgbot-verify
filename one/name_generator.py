@@ -77,7 +77,7 @@ def generate_birth_date(seed: Optional[str] = None):
     Generate a realistic student birth date (1998-2005) with optional seed.
     """
     rng = random.Random(seed)
-    year = rng.randint(1998, 2005)
+    year = rng.randint(2001, 2007)
     month = str(rng.randint(1, 12)).zfill(2)
     day = str(rng.randint(1, 28)).zfill(2)
     return f"{year}-{month}-{day}"

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class SheerIDVerifier:
     """SheerID Teacher Identity Verifier"""
 
-    def __init__(self, verification_id: str):
+    def __init__(self, verification_id: Optional[str] = None):
         """
         Initialize verifier
 
@@ -43,7 +43,8 @@ class SheerIDVerifier:
             verification_id: SheerID Verification ID
         """
         self.verification_id = verification_id
-        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        # Default device fingerprint if no ID yet, will be updated if new ID created
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id or "default")
         self.http_client = httpx.Client(
             timeout=30.0,
             headers={
@@ -52,7 +53,7 @@ class SheerIDVerifier:
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Origin": "https://my.sheerid.com",
-                "Referer": f"https://my.sheerid.com/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
+                "Referer": f"https://my.sheerid.com/verify/{PROGRAM_ID}/",
                 "X-SheerID-Device-Fingerprint": self.device_fingerprint,
                 "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
                 "sec-ch-ua-mobile": "?0",
@@ -63,6 +64,27 @@ class SheerIDVerifier:
                 "Connection": "keep-alive",
             }
         )
+
+    def create_verification(self) -> str:
+        """Create a fresh verificationId for K12"""
+        body = {
+            "programId": PROGRAM_ID,
+            "locale": "en-US",
+        }
+        data, status = self._sheerid_request(
+            "POST", f"{SHEERID_BASE_URL}/rest/v2/verification/", body
+        )
+        if status != 200 or not isinstance(data, dict) or not data.get("verificationId"):
+            raise Exception(f"Failed to create new K12 verification (Status {status}): {data}")
+
+        self.verification_id = data["verificationId"]
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        # Update client headers with new fingerprint and referer
+        self.http_client.headers["X-SheerID-Device-Fingerprint"] = self.device_fingerprint
+        self.http_client.headers["Referer"] = f"https://my.sheerid.com/verify/{PROGRAM_ID}/?verificationId={self.verification_id}"
+        
+        logger.info(f"✅ Created fresh verificationId: {self.verification_id}")
+        return self.verification_id
 
     def __del__(self):
         """Clean up HTTP client"""
@@ -116,6 +138,17 @@ class SheerIDVerifier:
             logger.error(f"SheerID request failed: {e}")
             raise
 
+    def get_verification_status(self) -> Dict:
+        """Get current verification status"""
+        data, status = self._sheerid_request(
+            "GET", 
+            f"{MY_SHEERID_URL}/rest/v2/verification/{self.verification_id}"
+        )
+        if status != 200:
+             # Just return empty or raise? Raise to be safe, but handled in verify
+             raise Exception(f"Failed to get status: {status}")
+        return data
+
     def _upload_to_s3(self, upload_url: str, content: bytes, mime_type: str) -> bool:
         """
         Upload file to S3
@@ -144,6 +177,35 @@ class SheerIDVerifier:
         """
         try:
             current_step = 'initial'
+            
+            # Check current status first
+            if self.verification_id:
+                try:
+                    status_info = self.get_verification_status()
+                    current_step_status = status_info.get("currentStep")
+                    logger.info(f"Current session status: {current_step_status}")
+                    if current_step_status == "success":
+                         return {
+                            'success': True,
+                            'message': 'Verification already successful',
+                            'verification_id': self.verification_id,
+                            'redirect_url': status_info.get('redirectUrl'),
+                            'status': status_info
+                         }
+                    elif current_step_status == "error":
+                         logger.warning(f"Verification {self.verification_id} is in ERROR state. Creating NEW session...")
+                         self.create_verification()
+                         current_step = 'initial'
+                    else:
+                        current_step = current_step_status
+                except Exception as e:
+                    logger.warning(f"Could not check status, creating fresh session: {e}")
+                    self.create_verification()
+                    current_step = 'initial'
+            else:
+                logger.info("No verificationId provided, creating fresh session...")
+                self.create_verification()
+                current_step = 'initial'
 
             # Generate teacher info
             # Generate teacher info with seeded randomness for consistency
@@ -177,45 +239,51 @@ class SheerIDVerifier:
             logger.info(f"✓ PDF Size: {pdf_size / 1024:.2f}KB, PNG Size: {png_size / 1024:.2f}KB")
 
             # Step 2: Submit teacher info
-            import time
-            logger.info("Step 2/4: Submitting teacher info (human delay)...")
-            time.sleep(random.uniform(4.0, 8.8))
-            step2_body = {
-                'firstName': first_name,
-                'lastName': last_name,
-                'birthDate': birth_date,
-                'email': email,
-                'phoneNumber': '',
-                'organization': {
-                    'id': school['id'],
-                    'idExtended': school['idExtended'],
-                    'name': school['name']
-                },
-                'deviceFingerprintHash': self.device_fingerprint,
-                'locale': 'en-US',
-                'metadata': {
-                    'marketConsentValue': False,
-                    'refererUrl': f"{MY_SHEERID_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
-                    'verificationId': self.verification_id,
-                    'submissionOptIn': 'By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount'
+            # If current_step is None, 'initial' or 'collectTeacherPersonalInfo', do this.
+            should_do_step_2 = current_step in ['initial', 'collectTeacherPersonalInfo', None]
+            
+            if should_do_step_2:
+                import time
+                logger.info("Step 2/4: Submitting teacher info (human delay)...")
+                time.sleep(random.uniform(4.0, 8.8))
+                step2_body = {
+                    'firstName': first_name,
+                    'lastName': last_name,
+                    'birthDate': birth_date,
+                    'email': email,
+                    'phoneNumber': '',
+                    'organization': {
+                        'id': school['id'],
+                        'idExtended': school['idExtended'],
+                        'name': school['name']
+                    },
+                    'deviceFingerprintHash': self.device_fingerprint,
+                    'locale': 'en-US',
+                    'metadata': {
+                        'marketConsentValue': False,
+                        'refererUrl': f"{MY_SHEERID_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
+                        'verificationId': self.verification_id,
+                        'submissionOptIn': 'By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount'
+                    }
                 }
-            }
 
-            step2_data, step2_status = self._sheerid_request(
-                'POST',
-                f"{SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectTeacherPersonalInfo",
-                step2_body
-            )
+                step2_data, step2_status = self._sheerid_request(
+                    'POST',
+                    f"{SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectTeacherPersonalInfo",
+                    step2_body
+                )
 
-            if step2_status != 200:
-                raise Exception(f"Step 2 failed (Status {step2_status}): {step2_data}")
+                if step2_status != 200:
+                    raise Exception(f"Step 2 failed (Status {step2_status}): {step2_data}")
 
-            if step2_data.get('currentStep') == 'error':
-                error_msg = ', '.join(step2_data.get('errorIds', ['Unknown error']))
-                raise Exception(f"Step 2 error: {error_msg}")
+                if step2_data.get('currentStep') == 'error':
+                    error_msg = ', '.join(step2_data.get('errorIds', ['Unknown error']))
+                    raise Exception(f"Step 2 error: {error_msg}")
 
-            logger.info(f"✓ Step 2 complete: {step2_data.get('currentStep')}")
-            current_step = step2_data.get('currentStep', current_step)
+                logger.info(f"✓ Step 2 complete: {step2_data.get('currentStep')}")
+                current_step = step2_data.get('currentStep', current_step)
+            else:
+                logger.info(f"Skipping Step 2 (Current Status: {current_step})")
 
             # Step 3: Skip SSO (if needed)
             if current_step in ['sso', 'collectTeacherPersonalInfo']:

@@ -21,22 +21,43 @@ logger = logging.getLogger(__name__)
 class SheerIDVerifier:
     """SheerID Student Identity Verifier"""
 
-    def __init__(self, verification_id: str):
+    def __init__(self, verification_id: Optional[str] = None, proxy: Optional[str] = None):
+        import time
         self.verification_id = verification_id
-        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        self.proxy = proxy or config.PROXY
+        
+        # Select a modern random User-Agent
+        self.uas = [
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+        ]
+        self.user_agent = random.choice(self.uas)
+        
+        # Default device fingerprint
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id or str(time.time()))
+        
+        # Configure proxy if provided
+        proxies = None
+        if self.proxy:
+            if not self.proxy.startswith("http"):
+                self.proxy = f"http://{self.proxy}"
+            proxies = {"all://": self.proxy}
+
         self.http_client = httpx.Client(
             timeout=30.0,
+            proxy=proxies,
             headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "User-Agent": self.user_agent,
                 "Accept": "application/json, text/plain, */*",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept-Encoding": "gzip, deflate, br",
-                "Origin": "https://my.sheerid.com",
-                "Referer": f"https://my.sheerid.com/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
+                "Origin": "https://services.sheerid.com",
+                "Referer": f"https://services.sheerid.com/verify/{config.PROGRAM_ID}/",
                 "X-SheerID-Device-Fingerprint": self.device_fingerprint,
-                "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                "sec-ch-ua": '"Google Chrome";v="132", "Chromium";v="132", "Not_A Brand";v="24"',
                 "sec-ch-ua-mobile": "?0",
-                "sec-ch-ua-platform": '"macOS"',
+                "sec-ch-ua-platform": '"macOS"' if "Macintosh" in self.user_agent else '"Windows"',
                 "sec-fetch-dest": "empty",
                 "sec-fetch-mode": "cors",
                 "sec-fetch-site": "same-site",
@@ -44,16 +65,65 @@ class SheerIDVerifier:
             }
         )
 
+    def create_verification(self) -> str:
+        """Create a fresh verificationId for Gemini"""
+        # For Gemini, we can use a generic referer if none provided
+        body = {
+            "programId": config.PROGRAM_ID,
+            "locale": "en-US",
+            "metadata": {
+                "utm_source": config.DEFAULT_UTM_PARAMS.get('utm_source'),
+                "utm_medium": config.DEFAULT_UTM_PARAMS.get('utm_medium'),
+                "utm_campaign": config.DEFAULT_UTM_PARAMS.get('utm_campaign')
+            }
+        }
+        data, status = self._sheerid_request(
+            "POST", f"{config.SHEERID_BASE_URL}/rest/v2/verification/", body
+        )
+        if status != 200 or not isinstance(data, dict) or not data.get("verificationId"):
+            raise Exception(f"Failed to create new Gemini verification (Status {status}): {data}")
+
+        self.verification_id = data["verificationId"]
+        self.device_fingerprint = self._generate_device_fingerprint(self.verification_id)
+        # Update client headers with new fingerprint and referer
+        self.http_client.headers["X-SheerID-Device-Fingerprint"] = self.device_fingerprint
+        self.http_client.headers["Referer"] = f"https://my.sheerid.com/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}"
+        
+        logger.info(f"✅ Created fresh verificationId: {self.verification_id}")
+        return self.verification_id
+
     def __del__(self):
         if hasattr(self, "http_client"):
             self.http_client.close()
 
     @staticmethod
     def _generate_device_fingerprint(seed: str) -> str:
-        """Generate a random 32-character hex fingerprint seeded for consistency"""
+        """Generate a realistic 32-character hex fingerprint - non-deterministic for better stealth"""
+        import time
+        import hashlib
+        
+        # Seed only for SOME base consistency, but always add time for fresh sessions
         rng = random.Random(seed)
-        chars = '0123456789abcdef'
-        return ''.join(rng.choice(chars) for _ in range(32))
+        
+        # Realistic components to hash
+        resolutions = ["1920x1080", "1366x768", "1536x864", "1440x900", "1280x720"]
+        platforms = ["Win32", "MacIntel", "Linux x86_64"]
+        languages = ["en-US", "en-GB", "en-CA"]
+        
+        # Adding time ensures that every "Retry" looks like a new device
+        components = [
+            str(seed),
+            str(int(time.time() * 1000)),
+            rng.choice(resolutions),
+            rng.choice(platforms),
+            rng.choice(languages),
+            "Google Inc.",
+            str(rng.randint(4, 16)), # CPU cores
+            str(rng.randint(8, 32))  # RAM GB
+        ]
+        
+        hash_str = "|".join(components)
+        return hashlib.md5(hash_str.encode()).hexdigest()
 
     @staticmethod
     def normalize_url(url: str) -> str:
@@ -88,6 +158,16 @@ class SheerIDVerifier:
             logger.error(f"SheerID request failed: {e}")
             raise
 
+    def get_verification_status(self) -> Dict:
+        """Get current verification status"""
+        data, status = self._sheerid_request(
+            "GET", 
+            f"{config.MY_SHEERID_URL}/rest/v2/verification/{self.verification_id}"
+        )
+        if status != 200:
+             raise Exception(f"Failed to get status: {status}")
+        return data
+
     def _upload_to_s3(self, upload_url: str, img_data: bytes) -> bool:
         """Upload PNG to S3"""
         try:
@@ -99,6 +179,13 @@ class SheerIDVerifier:
         except Exception as e:
             logger.error(f"S3 upload failed: {e}")
             return False
+
+    @staticmethod
+    def select_university() -> Dict:
+        """Weighted random selection based on success rates"""
+        schools_list = list(config.SCHOOLS.values())
+        weights = [s.get('weight', 50) for s in schools_list]
+        return random.choices(schools_list, weights=weights, k=1)[0]
 
     def verify(
         self,
@@ -112,73 +199,116 @@ class SheerIDVerifier:
         try:
             current_step = "initial"
 
+            # Check current status first
+            # FOR GEMINI: Always create a fresh session to avoid history blocks, 
+            # unless we just successfully verified or it's already successful.
+            force_new = True 
+            
+            if self.verification_id:
+                try:
+                    status_info = self.get_verification_status()
+                    current_step_status = status_info.get("currentStep")
+                    logger.info(f"Current session status: {current_step_status}")
+
+                    if current_step_status == "success":
+                         return {
+                            "success": True, 
+                            "message": "Verification already successful",
+                            "verification_id": self.verification_id,
+                            "redirect_url": status_info.get("redirectUrl"),
+                            "status": status_info
+                         }
+                    
+                    if force_new:
+                        logger.info("Forcing NEW session for better stealth...")
+                        self.create_verification()
+                        current_step = "initial"
+                    else:
+                        current_step = current_step_status
+                except Exception as e:
+                    logger.warning(f"Could not check status, creating fresh session: {e}")
+                    self.create_verification()
+                    current_step = "initial"
+            else:
+                logger.info("No verificationId provided, creating fresh session...")
+                self.create_verification()
+                current_step = "initial"
+
             # Generate student info with seeded randomness for consistency
             if not first_name or not last_name:
                 name = NameGenerator.generate(seed=self.verification_id)
                 first_name = name["first_name"]
                 last_name = name["last_name"]
 
-            school_id = school_id or config.DEFAULT_SCHOOL_ID
-            school = config.SCHOOLS[school_id]
+            # Select school: if specified use it, otherwise use weighted random
+            if school_id and school_id in config.SCHOOLS:
+                school = config.SCHOOLS[school_id]
+            else:
+                school = self.select_university()
+                school_id = str(school['id'])
 
             if not email:
-                email = generate_email(first_name, last_name, seed=self.verification_id)
+                email = generate_email(first_name, last_name, school['domain'], seed=self.verification_id)
             if not birth_date:
                 birth_date = generate_birth_date(seed=self.verification_id)
             
-            phone_number = generate_phone_number(seed=self.verification_id)
-
             logger.info(f"Student Information: {first_name} {last_name}")
             logger.info(f"Email: {email}")
             logger.info(f"School: {school['name']}")
             logger.info(f"Birthday: {birth_date}")
             logger.info(f"Verification ID: {self.verification_id}")
 
-            # Generate student ID PNG
-            logger.info("Step 1/4: Generating student ID PNG...")
+            # Generate student document PNG (Randomly Transcript or ID)
+            logger.info("Step 1/4: Generating student document PNG...")
             img_data = generate_image(first_name, last_name, school_id)
             file_size = len(img_data)
             logger.info(f"✅ PNG Size: {file_size / 1024:.2f}KB")
 
             # Submit student info
-            import time
-            logger.info("Step 2/4: Submitting student info (with human delay)...")
-            time.sleep(random.uniform(3.5, 7.2))  # Mimic human typing speed
-            step2_body = {
-                "firstName": first_name,
-                "lastName": last_name,
-                "birthDate": birth_date,
-                "email": email,
-                "phoneNumber": phone_number,
-                "organization": {
-                    "id": int(school_id),
-                    "idExtended": school["idExtended"],
-                    "name": school["name"],
-                },
-                "deviceFingerprintHash": self.device_fingerprint,
-                "locale": "en-US",
-                "metadata": {
-                    "marketConsentValue": False,
-                    "refererUrl": f"{config.MY_SHEERID_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
-                    "verificationId": self.verification_id,
-                    "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
-                },
-            }
+            should_do_step_2 = current_step in ["initial", "collectStudentPersonalInfo", None]
+            
+            if should_do_step_2:
+                import time
+                logger.info("Step 2/4: Submitting student info (with human delay)...")
+                time.sleep(random.uniform(4.2, 8.5))  # Mimic human typing speed
+                step2_body = {
+                    "firstName": first_name,
+                    "lastName": last_name,
+                    "birthDate": birth_date,
+                    "email": email,
+                    "phoneNumber": "",
+                    "organization": {
+                        "id": int(school_id),
+                        "idExtended": school["idExtended"],
+                        "name": school["name"],
+                    },
+                    "deviceFingerprintHash": self.device_fingerprint,
+                    "locale": "en-US",
+                    "metadata": {
+                        "marketConsentValue": False,
+                        "verificationId": self.verification_id,
+                        "refererUrl": f"https://services.sheerid.com/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
+                        "flags": '{"collect-info-step-email-first":"default","doc-upload-considerations":"default","doc-upload-may24":"default","doc-upload-redesign-use-legacy-message-keys":false,"docUpload-assertion-checklist":"default","font-size":"default","include-cvec-field-france-student":"not-labeled-optional"}',
+                        "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
+                    },
+                }
 
-            step2_data, step2_status = self._sheerid_request(
-                "POST",
-                f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectStudentPersonalInfo",
-                step2_body,
-            )
+                step2_data, step2_status = self._sheerid_request(
+                    "POST",
+                    f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectStudentPersonalInfo",
+                    step2_body,
+                )
 
-            if step2_status != 200:
-                raise Exception(f"Step 2 failed (Status {step2_status}): {step2_data}")
-            if step2_data.get("currentStep") == "error":
-                error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
-                raise Exception(f"Step 2 error: {error_msg}")
+                if step2_status != 200:
+                    raise Exception(f"Step 2 failed (Status {step2_status}): {step2_data}")
+                if step2_data.get("currentStep") == "error":
+                    error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
+                    raise Exception(f"Step 2 error: {error_msg}")
 
-            logger.info(f"✅ Step 2 complete: {step2_data.get('currentStep')}")
-            current_step = step2_data.get("currentStep", current_step)
+                logger.info(f"✅ Step 2 complete: {step2_data.get('currentStep')}")
+                current_step = step2_data.get("currentStep", current_step)
+            else:
+                 logger.info(f"Skipping Step 2 (Current Status: {current_step})")
 
             # Skip SSO if needed
             if current_step in ["sso", "collectStudentPersonalInfo"]:
@@ -236,15 +366,20 @@ class SheerIDVerifier:
 def main():
     """Main Function - Command Line Interface"""
     import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SheerID Student Identity Verification Tool")
+    parser.add_argument("url", nargs="?", help="SheerID Verification URL")
+    parser.add_argument("--proxy", help="Proxy server (host:port or http://user:pass@host:port)")
+    args = parser.parse_args()
 
     print("=" * 60)
     print("SheerID Student Identity Verification Tool (Python Version)")
     print("=" * 60)
     print()
 
-    if len(sys.argv) > 1:
-        url = sys.argv[1]
-    else:
+    url = args.url
+    if not url:
         url = input("Please enter SheerID Verification URL: ").strip()
 
     if not url:
@@ -257,9 +392,11 @@ def main():
         sys.exit(1)
 
     print(f"✅ Parsed Verification ID: {verification_id}")
+    if args.proxy:
+        print(f"🔒 Using proxy: {args.proxy}")
     print()
 
-    verifier = SheerIDVerifier(verification_id)
+    verifier = SheerIDVerifier(verification_id, proxy=args.proxy)
     result = verifier.verify()
 
     print()
