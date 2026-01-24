@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 
 from config import ADMIN_USER_ID, ABA_QR_PATH, BINANCE_QR_PATH
 from database.base import Database
-from utils.checks import reject_group_command, global_checks
+from utils.checks import reject_group_command, global_checks, check_force_join_membership, send_join_prompt
 from utils.messages import (
     get_welcome_message,
     get_about_message,
@@ -33,6 +33,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
     username = user.username or ""
     full_name = user.full_name or ""
 
+    # Check for force join first
+    if not await check_force_join_membership(user_id, context):
+        await send_join_prompt(update, context)
+        return
+
     # If already initialized, we still show the full welcome message as a guide
     if db.user_exists(user_id):
         welcome_msg = get_welcome_message(full_name, is_new_user=False)
@@ -48,6 +53,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: 
                 invited_by = None
         except Exception:
             invited_by = None
+            
+    # Store in user_data for referral after joining group/channel
+    if invited_by:
+        context.user_data['invited_by'] = invited_by
 
     # Create user
     if db.create_user(user_id, username, full_name, invited_by):
@@ -703,3 +712,43 @@ async def guide_back_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
+
+
+async def join_verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
+    """Handle 'I have joined both' button callback"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if await check_force_join_membership(user_id, context):
+        # User joined! Proceed to register/start
+        user = query.from_user
+        username = user.username or ""
+        full_name = user.full_name or ""
+        
+        # Original logic from start_command
+        if db.user_exists(user_id):
+            welcome_msg = get_welcome_message(full_name, is_new_user=False)
+            await query.message.reply_text(welcome_msg, parse_mode="Markdown")
+        else:
+            # Handle invitation (if any stored in user_data)
+            invited_by = context.user_data.get('invited_by')
+            if db.create_user(user_id, username, full_name, invited_by):
+                welcome_msg = get_welcome_message(full_name, bool(invited_by), is_new_user=True)
+                await query.message.reply_text(welcome_msg, parse_mode="Markdown")
+            else:
+                await query.message.reply_text("Registration failed. Please try again later.")
+        
+        # Delete the join prompt
+        try:
+            await query.message.delete()
+        except:
+            pass
+    else:
+        await query.message.reply_text(
+            "❌ **Verification Failed**\n\n"
+            "You haven't joined both our channel and community group yet.\n"
+            "Please join both and try again!",
+            parse_mode="Markdown"
+        )

@@ -19,6 +19,12 @@ else:
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "")
 CHANNEL_URL = os.getenv("CHANNEL_URL", "")
 
+# Required Group and Channel for Membership Check
+REQUIRED_GROUP_USERNAME = "nexuscreatorai"
+REQUIRED_CHANNEL_USERNAME = "nexuscreator_ai"
+REQUIRED_GROUP_URL = "https://t.me/nexuscreatorai"
+REQUIRED_CHANNEL_URL = "https://t.me/nexuscreator_ai"
+
 # System Settings
 MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "False").lower() == "true"
 MAINTENANCE_REASON = os.getenv("MAINTENANCE_REASON", "We are currently performing scheduled maintenance. Please check back later.")

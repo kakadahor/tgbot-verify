@@ -30,6 +30,7 @@ from handlers.user_commands import (
     topup_local_callback,
     topup_intl_callback,
     proof_command,
+    join_verify_callback,
 )
 from handlers.verify_commands import (
     verify_command,
@@ -164,6 +165,7 @@ def main():
     application.add_handler(CallbackQueryHandler(guide_back_handler, pattern="^guide_back$"))
     application.add_handler(CallbackQueryHandler(topup_local_callback, pattern="^topup_local$"))
     application.add_handler(CallbackQueryHandler(topup_intl_callback, pattern="^topup_intl$"))
+    application.add_handler(CallbackQueryHandler(partial(join_verify_callback, db=db), pattern="^verify_join$"))
 
     # Set bot commands menu on startup
     async def post_init(application: Application) -> None:

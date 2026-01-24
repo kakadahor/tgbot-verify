@@ -5,7 +5,16 @@ from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from config import CHANNEL_USERNAME, MAINTENANCE_MODE, MAINTENANCE_REASON, RATE_LIMIT_DELAY
+from config import (
+    CHANNEL_USERNAME, 
+    MAINTENANCE_MODE, 
+    MAINTENANCE_REASON, 
+    RATE_LIMIT_DELAY,
+    REQUIRED_GROUP_USERNAME,
+    REQUIRED_CHANNEL_USERNAME,
+    REQUIRED_GROUP_URL,
+    REQUIRED_CHANNEL_URL
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +68,55 @@ async def check_channel_membership(user_id: int, context: ContextTypes.DEFAULT_T
         return False
 
 
+async def check_force_join_membership(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Check if searching joined both required group AND channel"""
+    # Skip for admins
+    from config import ADMIN_IDS
+    if user_id in ADMIN_IDS:
+        return True
+        
+    try:
+        # Check Channel
+        channel_member = await context.bot.get_chat_member(f"@{REQUIRED_CHANNEL_USERNAME}", user_id)
+        if channel_member.status not in ["member", "administrator", "creator"]:
+            return False
+            
+        # Check Group
+        group_member = await context.bot.get_chat_member(f"@{REQUIRED_GROUP_USERNAME}", user_id)
+        if group_member.status not in ["member", "administrator", "creator"]:
+            return False
+            
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to check force join membership for {user_id}: {e}")
+        return False
+
+
+async def send_join_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send the join requirement prompt with buttons"""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    keyboard = [
+        [InlineKeyboardButton("📢 Join Channel", url=REQUIRED_CHANNEL_URL)],
+        [InlineKeyboardButton("👥 Join Group", url=REQUIRED_GROUP_URL)],
+        [InlineKeyboardButton("✅ I have joined both!", callback_data="verify_join")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message_text = (
+        "⚠️ **Join Required**\n\n"
+        "To use this bot, you must join our official channel and community group first.\n\n"
+        "1️⃣ **Join Channel**\n"
+        "2️⃣ **Join Group**\n"
+        "3️⃣ **Click the button below to verify**"
+    )
+    
+    if update.callback_query:
+        await update.callback_query.message.reply_text(message_text, parse_mode="Markdown", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(message_text, parse_mode="Markdown", reply_markup=reply_markup)
+
+
 def global_checks(registration_required=True):
     """Decorator for global checks: Maintenance, Rate Limit, Blacklist, Registration"""
     def decorator(func):
@@ -103,6 +161,16 @@ def global_checks(registration_required=True):
             if registration_required and db:
                 if not db.user_exists(user_id):
                     await update.message.reply_text("Please register using /start first.")
+                    return
+
+            # 5. Force Join Check
+            # Allow /start and verify_join callback to bypass this (they handle it themselves)
+            is_start = update.message and update.message.text and update.message.text.startswith("/start")
+            is_join_verify = update.callback_query and update.callback_query.data == "verify_join"
+            
+            if not is_start and not is_join_verify:
+                if not await check_force_join_membership(user_id, context):
+                    await send_join_prompt(update, context)
                     return
 
             return await func(update, context, *args, **kwargs)
