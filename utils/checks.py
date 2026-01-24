@@ -75,20 +75,29 @@ async def check_force_join_membership(user_id: int, context: ContextTypes.DEFAUL
     if user_id in ADMIN_IDS:
         return True
         
+    allowed_statuses = ["member", "administrator", "creator", "restricted"]
+    logger.info(f"🔍 Checking membership for user {user_id}...")
+        
     try:
         # Check Channel
-        channel_member = await context.bot.get_chat_member(f"@{REQUIRED_CHANNEL_USERNAME}", user_id)
-        if channel_member.status not in ["member", "administrator", "creator"]:
+        channel_id = f"@{REQUIRED_CHANNEL_USERNAME}"
+        channel_member = await context.bot.get_chat_member(channel_id, user_id)
+        logger.info(f"📡 Channel ({channel_id}) Status for {user_id}: {channel_member.status}")
+        
+        if channel_member.status not in allowed_statuses:
             return False
             
         # Check Group
-        group_member = await context.bot.get_chat_member(f"@{REQUIRED_GROUP_USERNAME}", user_id)
-        if group_member.status not in ["member", "administrator", "creator"]:
+        group_id = f"@{REQUIRED_GROUP_USERNAME}"
+        group_member = await context.bot.get_chat_member(group_id, user_id)
+        logger.info(f"👥 Group ({group_id}) Status for {user_id}: {group_member.status}")
+        
+        if group_member.status not in allowed_statuses:
             return False
             
         return True
-    except TelegramError as e:
-        logger.error(f"Failed to check force join membership for {user_id}: {e}")
+    except Exception as e:
+        logger.error(f"❌ Failed to check force join membership for {user_id}: {e}")
         return False
 
 
