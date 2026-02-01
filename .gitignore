@@ -59,7 +59,7 @@ serviceAccountKey.json
 config_local.py
 
 # Docker
-.dockerignore
+
 
 # Playwright
 .playwright/
