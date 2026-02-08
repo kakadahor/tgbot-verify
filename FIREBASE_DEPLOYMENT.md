@@ -157,8 +157,10 @@ gcloud run deploy tgbot-verify \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars="BOT_TOKEN=YOUR_BOT_TOKEN,ADMIN_USER_ID=245500749,DB_TYPE=firestore" \
-  --min-instances=1 \
-  --max-instances=1
+  --min-instances=0 \
+  --max-instances=2 \
+  --memory=1Gi \
+  --cpu=1
 ```
 
 **Environment Variables to Set:**
